@@ -174,6 +174,9 @@ async function addBuddiesWithPlaywright(
 
         const btn = addButtons[i];
 
+        // 팝업에서 확인한 실제 blogId (catch 블록에서도 참조 가능하도록 바깥에 선언)
+        let actualBlogId = `unknown_${i + 1}`;
+
         try {
           // 버튼에서 blogId 추출 (href 또는 data 속성에서)
           const btnHref = await btn.getAttribute('href');
@@ -217,16 +220,41 @@ async function addBuddiesWithPlaywright(
           await buddyPopupPage.waitForLoadState('domcontentloaded');
           await buddyPopupPage.waitForTimeout(2000);
 
-          console.log(`[서로이웃] 팝업 URL: ${buddyPopupPage.url()}`);
+          // 팝업 URL에서 실제 blogId 추출 (outer 변수 갱신)
+          const popupUrl = buddyPopupPage.url();
+          actualBlogId = popupUrl.match(/blogId=([^&]+)/)?.[1] || targetBlogId;
+          console.log(`[서로이웃] 팝업 URL: ${popupUrl}`);
+          console.log(`[서로이웃] 대상 blogId: ${actualBlogId}`);
 
-          // 이미 이웃인지 확인
+          // 팝업 페이지 텍스트 확인
           const pageContent = await buddyPopupPage.content();
-          if (pageContent.includes('이미 이웃') || pageContent.includes('already') || buddyPopupPage.url().includes('error')) {
+
+          // 서로이웃 신청을 받지 않는 경우 → 건너뜀 (카운트 미포함)
+          if (
+            pageContent.includes('서로이웃 신청을 받지 않는') ||
+            pageContent.includes('서로이웃을 받지 않')
+          ) {
+            console.log('[서로이웃] 서로이웃 신청을 받지 않는 이웃입니다. 건너뜁니다.');
+            totalSkipped++;
+            details.push({
+              index: totalProcessed,
+              blogId: actualBlogId,
+              added: false,
+              reason: '서로이웃 신청을 받지 않는 이웃',
+            });
+            await buddyPopupPage.close().catch(() => {});
+            buddyPopupPage = null;
+            await page.waitForTimeout(1000);
+            continue;
+          }
+
+          // 이미 이웃인 경우 → 건너뜀 (카운트 미포함)
+          if (pageContent.includes('이미 이웃') || pageContent.includes('already')) {
             console.log('[서로이웃] 이미 이웃 상태입니다. 건너뜁니다.');
             totalSkipped++;
             details.push({
               index: totalProcessed,
-              blogId: targetBlogId,
+              blogId: actualBlogId,
               added: false,
               reason: '이미 이웃 상태',
             });
@@ -237,12 +265,27 @@ async function addBuddiesWithPlaywright(
           }
 
           // 6단계: "서로이웃으로 신청합니다." 라디오 버튼 선택
-          console.log('[서로이웃] 서로이웃 라디오 버튼 클릭...');
+          // label[for="each_buddy_add"] 클릭 (label이 pointer events를 가로채므로)
+          console.log('[서로이웃] 서로이웃 라디오 버튼(label) 클릭...');
           try {
-            // #each_buddy_add 클릭 (서로이웃 라디오 버튼)
-            const bothBuddyRadio = await buddyPopupPage.locator('#each_buddy_add').first();
-            await bothBuddyRadio.click();
-            await buddyPopupPage.waitForTimeout(1000);
+            const radioLabel = buddyPopupPage.locator('label[for="each_buddy_add"]').first();
+            const labelCount = await radioLabel.count();
+
+            if (labelCount > 0) {
+              await radioLabel.click();
+              await buddyPopupPage.waitForTimeout(800);
+            } else {
+              // label이 없으면 JavaScript로 직접 선택
+              await buddyPopupPage.evaluate(() => {
+                const radio = document.querySelector('#each_buddy_add') as HTMLInputElement;
+                if (radio) {
+                  radio.checked = true;
+                  radio.dispatchEvent(new Event('change', { bubbles: true }));
+                  radio.dispatchEvent(new Event('click', { bubbles: true }));
+                }
+              });
+              await buddyPopupPage.waitForTimeout(800);
+            }
 
             // checked 상태 확인
             const isChecked = await buddyPopupPage.evaluate(() => {
@@ -303,7 +346,7 @@ async function addBuddiesWithPlaywright(
           totalAdded++;
           details.push({
             index: totalProcessed,
-            blogId: targetBlogId,
+            blogId: actualBlogId,
             added: true,
           });
 
@@ -322,6 +365,7 @@ async function addBuddiesWithPlaywright(
 
           details.push({
             index: totalProcessed,
+            blogId: actualBlogId,
             added: false,
             reason: errMsg,
           });
