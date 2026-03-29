@@ -226,14 +226,19 @@ async function addBuddiesWithPlaywright(
           console.log(`[서로이웃] 팝업 URL: ${popupUrl}`);
           console.log(`[서로이웃] 대상 blogId: ${actualBlogId}`);
 
-          // 팝업 페이지 텍스트 확인
-          const pageContent = await buddyPopupPage.content();
+          // 특정 선택자로 안내 문구 확인 (전체 HTML 검색 대신 정확한 노드만 확인)
+          const noticeText = await buddyPopupPage.evaluate(() => {
+            // 서로이웃 불가 안내 문구 선택자
+            const noticeEl = document.querySelector(
+              '#content > div > form > fieldset > div.popup_text > div.buddy_state > p.notice'
+            );
+            return noticeEl ? noticeEl.textContent?.trim() || '' : '';
+          });
+
+          console.log(`[서로이웃] 안내 문구: "${noticeText}"`);
 
           // 서로이웃 신청을 받지 않는 경우 → 건너뜀 (카운트 미포함)
-          if (
-            pageContent.includes('서로이웃 신청을 받지 않는') ||
-            pageContent.includes('서로이웃을 받지 않')
-          ) {
+          if (noticeText.includes('서로이웃 신청을 받지 않는')) {
             console.log('[서로이웃] 서로이웃 신청을 받지 않는 이웃입니다. 건너뜁니다.');
             totalSkipped++;
             details.push({
@@ -249,14 +254,20 @@ async function addBuddiesWithPlaywright(
           }
 
           // 이미 이웃인 경우 → 건너뜀 (카운트 미포함)
-          if (pageContent.includes('이미 이웃') || pageContent.includes('already')) {
-            console.log('[서로이웃] 이미 이웃 상태입니다. 건너뜁니다.');
+          const alreadyBuddy = await buddyPopupPage.evaluate(() => {
+            const el = document.querySelector('#content > div > form > fieldset > div.popup_text > div.buddy_state > p.notice');
+            const text = el?.textContent?.trim() || '';
+            return text.includes('이미 이웃') || text.includes('이웃 신청 중');
+          });
+
+          if (alreadyBuddy) {
+            console.log('[서로이웃] 이미 이웃 또는 신청 중 상태입니다. 건너뜁니다.');
             totalSkipped++;
             details.push({
               index: totalProcessed,
               blogId: actualBlogId,
               added: false,
-              reason: '이미 이웃 상태',
+              reason: '이미 이웃 또는 신청 중',
             });
             await buddyPopupPage.close().catch(() => {});
             buddyPopupPage = null;
