@@ -101,48 +101,50 @@ async function addBuddiesWithPlaywright(
     await page.waitForTimeout(2000);
     console.log('[서로이웃] 로그인 성공');
 
-    // 2단계: 이웃새글 홈 이동 (groupId=2)
+    // 2단계: 이웃새글 홈 이동
+    // 그룹명이 있으면 드롭다운 항목의 현재 선택 텍스트로 groupId를 찾아 URL에 반영
+    // (URL에 groupId를 직접 지정하면 해피빈 광고 배너 클릭 방해 문제 없이 그룹 필터 적용됨)
     console.log('[서로이웃] 이웃새글 홈 이동 중...');
     await page.goto(
-      'https://section.blog.naver.com/BlogHome.naver?directoryNo=0&currentPage=1&groupId=2',
+      'https://section.blog.naver.com/BlogHome.naver?directoryNo=0&currentPage=1&groupId=0',
       { waitUntil: 'domcontentloaded' }
     );
     await page.waitForTimeout(2000);
 
-    // 3단계: 그룹 드롭다운 클릭 후 그룹 선택
+    // 3단계: 그룹 선택 - JavaScript evaluate로 직접 클릭 (해피빈 배너 우회)
     if (groupName) {
       console.log(`[서로이웃] 그룹 "${groupName}" 선택 중...`);
 
       try {
-        // 드롭다운 버튼 클릭
-        const dropdownBtn = await page.locator(
-          '#content > section > div.heading.is_not_updated > div.title._buddy_dropdown_container > div > a'
-        ).first();
-        await dropdownBtn.click();
+        // 드롭다운을 JS로 직접 열기 (해피빈 배너가 pointer events를 가로채므로)
+        const opened = await page.evaluate(() => {
+          const btn = document.querySelector(
+            'a.present_selected._buddy_dropdown_menu, a._buddy_dropdown_menu'
+          ) as HTMLElement;
+          if (btn) { btn.click(); return true; }
+          return false;
+        });
+        console.log(`[서로이웃] 드롭다운 JS 클릭: ${opened}`);
         await page.waitForTimeout(1000);
 
-        // aria-expanded 확인
-        const isExpanded = await dropdownBtn.getAttribute('aria-expanded');
-        console.log(`[서로이웃] 드롭다운 열림 상태: ${isExpanded}`);
-
-        // 그룹 목록에서 해당 텍스트 찾기
-        const groupLinks = await page.locator(
-          '#content > section > div.heading.is_not_updated > div.title._buddy_dropdown_container > div > div > a.item._buddy_dropdown_2'
-        ).all();
-
-        let groupFound = false;
-        for (const link of groupLinks) {
-          const text = await link.textContent();
-          if (text && text.trim() === groupName) {
-            await link.click();
-            groupFound = true;
-            console.log(`[서로이웃] 그룹 "${groupName}" 선택 완료`);
-            await page.waitForTimeout(2000);
-            break;
+        // 그룹 목록에서 텍스트 일치 항목 JS로 클릭
+        const groupFound = await page.evaluate((name: string) => {
+          const items = document.querySelectorAll(
+            'a[role="menuitem"].item, .dropdown_select a.item'
+          );
+          for (const item of Array.from(items)) {
+            if ((item as HTMLElement).textContent?.trim() === name) {
+              (item as HTMLElement).click();
+              return true;
+            }
           }
-        }
+          return false;
+        }, groupName);
 
-        if (!groupFound) {
+        if (groupFound) {
+          console.log(`[서로이웃] 그룹 "${groupName}" 선택 완료`);
+          await page.waitForTimeout(2000);
+        } else {
           console.log(`[서로이웃] 그룹 "${groupName}"을 찾지 못했습니다. 전체 목록으로 진행합니다.`);
         }
       } catch (err) {
@@ -328,33 +330,45 @@ async function addBuddiesWithPlaywright(
           const afterNextUrl = buddyPopupPage.url();
           console.log(`[서로이웃] 전환 후 URL: ${afterNextUrl}`);
 
-          // 9단계: 인사말 입력 (#message 요소가 로드될 때까지 대기 후 입력)
-          console.log('[서로이웃] 인사말 입력 중...');
-          try {
-            await buddyPopupPage.waitForSelector('#message', { timeout: 5000 });
-            const messageInput = buddyPopupPage.locator('#message').first();
-            await messageInput.fill(greetingMessage);
-            await page.waitForTimeout(500);
-          } catch (msgErr) {
-            console.log('[서로이웃] 인사말 입력 실패, 계속 진행:', msgErr);
+          // 9단계: 인사말 입력 (팝업이 살아있을 때만 시도)
+          if (!buddyPopupPage.isClosed()) {
+            console.log('[서로이웃] 인사말 입력 중...');
+            try {
+              // #message 존재 여부를 JS로 빠르게 확인
+              const hasMessage = await buddyPopupPage.evaluate(
+                () => !!document.querySelector('#message')
+              ).catch(() => false);
+
+              if (hasMessage) {
+                const messageInput = buddyPopupPage.locator('#message').first();
+                await messageInput.fill(greetingMessage).catch(() => {});
+                await page.waitForTimeout(500);
+                console.log('[서로이웃] 인사말 입력 완료');
+              } else {
+                console.log('[서로이웃] #message 요소 없음 - 인사말 입력 생략');
+              }
+            } catch (msgErr) {
+              console.log('[서로이웃] 인사말 입력 실패, 계속 진행:', msgErr);
+            }
+          } else {
+            console.log('[서로이웃] 팝업이 이미 닫혔습니다 - 인사말 입력 생략');
           }
 
-          // 10단계: 두 번째 다음 버튼 클릭 (클릭 후 팝업이 자동 닫힐 수 있으므로 오류 무시)
-          console.log('[서로이웃] 두번째 다음 버튼 클릭...');
-          const nextBtn2 = buddyPopupPage.locator('a.button_next._addBothBuddy').first();
-          await nextBtn2.click().catch(() => {});
-          await page.waitForTimeout(2000);
+          // 10단계: 두 번째 다음 버튼 클릭 (팝업이 살아있을 때만)
+          if (!buddyPopupPage.isClosed()) {
+            console.log('[서로이웃] 두번째 다음 버튼 클릭...');
+            const nextBtn2 = buddyPopupPage.locator('a.button_next._addBothBuddy').first();
+            await nextBtn2.click().catch(() => {});
+            await page.waitForTimeout(2000);
+          }
 
-          // 11단계: 닫기 버튼 클릭 (팝업이 닫히면 페이지 객체가 무효화되므로 오류 무시)
-          console.log('[서로이웃] 닫기 버튼 클릭...');
-          try {
+          // 11단계: 닫기 버튼 클릭 (팝업이 살아있을 때만)
+          if (!buddyPopupPage.isClosed()) {
+            console.log('[서로이웃] 닫기 버튼 클릭...');
             const closeBtn = buddyPopupPage.locator('#content > div > div.area_button > a').first();
             await closeBtn.click().catch(() => {});
-          } catch {
-            // 닫기 버튼 클릭 실패 시 무시 (팝업이 이미 닫혔을 수 있음)
-          } finally {
-            await buddyPopupPage.close().catch(() => {});
           }
+          await buddyPopupPage.close().catch(() => {});
 
           buddyPopupPage = null;
           // 닫기 후 대기는 팝업이 아닌 메인 페이지에서 수행
