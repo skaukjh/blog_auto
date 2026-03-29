@@ -312,16 +312,20 @@ async function addBuddiesWithPlaywright(
             console.log('[서로이웃] 라디오 버튼 클릭 실패, 계속 진행:', radioErr);
           }
 
-          // 7단계: 다음 버튼 클릭
+          // 7단계: 다음 버튼 클릭 (팝업 내부 페이지 전환 대기)
           console.log('[서로이웃] 첫번째 다음 버튼 클릭...');
           const nextBtn1 = buddyPopupPage.locator(
             '#content > div > form > fieldset > div.area_button > a.button_next._buddyAddNext'
           ).first();
-          await nextBtn1.click().catch(() => {});
-          await page.waitForTimeout(2000);
+          // 클릭과 동시에 팝업 내 네비게이션 완료를 기다림
+          await Promise.all([
+            buddyPopupPage.waitForLoadState('domcontentloaded').catch(() => {}),
+            nextBtn1.click().catch(() => {}),
+          ]);
+          await page.waitForTimeout(1500);
 
           // 8단계: 페이지 전환 확인
-          const afterNextUrl = await buddyPopupPage.url().catch?.(() => '') ?? buddyPopupPage.url();
+          const afterNextUrl = buddyPopupPage.url();
           console.log(`[서로이웃] 전환 후 URL: ${afterNextUrl}`);
 
           // 9단계: 인사말 입력
