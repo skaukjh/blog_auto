@@ -1,0 +1,22 @@
+
+> blog_project@1.0.0 dev
+> next dev
+
+ ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of C:\Users\김재훈\package-lock.json as the root directory.
+ To silence this warning, set `outputFileTracingRoot` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/output#caveats for more information.
+ Detected additional lockfiles: 
+   * C:\Users\김재훈\Desktop\blog_project\package-lock.json
+
+ ⨯ Failed to start server
+Error: listen EADDRINUSE: address already in use :::3001
+    at <unknown> (Error: listen EADDRINUSE: address already in use :::3001)
+    at new Promise (<anonymous>) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 3001
+}
+[?25h

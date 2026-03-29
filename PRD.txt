@@ -1,0 +1,373 @@
+# AI Blog Post Generator with Expert System & Neighbor Automation
+## Product Requirements Document (PRD) - Updated 2026-02-16
+
+---
+
+## 📋 프로젝트 개요
+
+### 핵심 가치 제안
+4개 도메인 전문가(맛집, 제품, 여행, 리빙) 기반의 AI 블로그 글 자동 생성 + 이웃 블로그 자동화(댓글+좋아요) 통합 시스템
+
+### 주요 기능
+1. **Expert System**: 4개 도메인 전문가별 맞춤형 콘텐츠 생성
+2. **Neighbor Automation**: 이웃 블로그 자동 댓글/좋아요
+3. **Web Search Integration**: 팩트 기반 추천 제공
+4. **Multi-Model Support**: OpenAI, Claude, Gemini 지원
+
+---
+
+## 🏗️ 시스템 아키텍처
+
+### Core Components
+
+#### 1. Expert System (4개 전문가)
+```
+🍴 맛집 파워 블로거
+├── MAP API 통합 (근처 맛집 추천)
+├── 맛, 텍스처, 향기 특화 어휘
+└── 플레이팅/신선도 분석
+
+📦 제품 후기 파워 블로거
+├── 제품 비교 및 기능 분석
+├── 가성비 평가
+└── 유사 제품 추천
+
+✈️ 여행 파워 블로거
+├── 관광지 추천
+├── 분위기 묘사
+└── 주변 맛집 추천
+
+🏠 리빙 파워 블로거
+├── 인테리어 디자인
+├── 가구/제품 추천
+└── 공간 분석
+```
+
+**참고**: 패션 전문가는 Phase 22에서 제거됨
+
+#### 2. 이웃 블로그 자동화
+```
+Playwright 기반 자동화
+├── 이웃 블로그 글 리스트 순회
+├── 댓글 작성 조건 확인
+│   ├── URL에 대상 닉네임 포함
+│   └── 좋아요 미누름 상태
+├── GPT-4o로 자연스러운 댓글 생성 (80-150자, ~~요 종결)
+├── iframe 내 댓글 제출
+├── 좋아요 누르기
+└── 3분~5분 대기 (스팸 방지)
+```
+
+**Key Fix (2026-02-16)**:
+- 좋아요 상태 감지 정확화 (`aria-pressed` + 클래스)
+- 대기 시간 개선 (최소 3분, 30초 간격 카운트다운)
+
+#### 3. 웹 검색 + 추천
+```
+Web Search Integration
+├── Naver API (25,000건/일)
+├── Google CSE (100건/일)
+├── Hallucination 방지 (temperature: 0.1)
+└── 전문가별 추천
+    ├── 맛집: 주변 음식점
+    ├── 제품: 유사 상품
+    ├── 여행: 관광지 + 맛집
+    └── 리빙: 유사 제품
+```
+
+---
+
+## 🔄 생성 워크플로우
+
+### 1단계: 입력
+```
+사용자 입력
+├── 전문가 선택 (4개 중 1개)
+├── 이미지 (1-25장)
+├── 주제
+├── 키워드 (선택)
+├── 글 길이 (short/medium/long)
+└── AI 모델 선택
+    ├── OpenAI: gpt-4o, gpt-4.5, gpt-4o-mini
+    ├── Claude: Opus 4.6, Sonnet 4.5, Haiku 4.5
+    └── Gemini: 3 Pro, 3 Flash
+```
+
+### 2단계: 이미지 분석
+```
+Expert-specific Analysis
+├── 클라이언트 압축 (1920px, JPEG 85%)
+├── 배치 기본 분석 (5-6장씩, detail: "high")
+├── 전문가별 특화 분석
+│   └── 맛집: 맛, 텍스처, 신선도 중심
+│   └── 제품: 디자인, 기능성 중심
+│   └── 여행: 분위기, 관광지 중심
+│   └── 리빙: 공간, 스타일 중심
+└── 통합 컨텍스트 분석 (이미지 간 연관성)
+```
+
+### 3단계: 웹 검색 (선택)
+```
+Optional Web Search
+├── 전문가별 최적화 쿼리
+├── 검색 결과 필터링
+├── 팩트 기반 정보 추출
+└── 추천 생성
+```
+
+### 4단계: 콘텐츠 생성
+```
+Expert-Driven Generation
+├── 전문가 페르소나 적용 (영문)
+├── 한국어 콘텐츠 생성
+├── 이미지 마커 삽입 ([IMAGE_N])
+├── 키워드 자연스럽게 포함
+├── Temperature 조절 (창의성: 1-10 → 0.3-1.2)
+└── 블로그 스타일 동기화
+```
+
+---
+
+## 💰 예상 비용 (1회 요청)
+
+### 기본 시나리오 (10장 이미지)
+| 항목 | 모델 | 비용 |
+|------|------|------|
+| 이미지 분석 | gpt-4o | ~15원 |
+| 웹 검색 | Naver/Google | ~2원 |
+| 콘텐츠 생성 | gpt-4o | ~5원 |
+| **합계** | - | **~22원** |
+
+### 최고품질 시나리오
+| 항목 | 모델 | 비용 |
+|------|------|------|
+| 이미지 분석 | gpt-5.2 | ~25원 |
+| 웹 검색 + 팩트검증 | Claude | ~3원 |
+| 콘텐츠 생성 | gpt-4.5 | ~6원 |
+| **합계** | - | **~34원** |
+
+---
+
+## 🎯 기술 스택
+
+### Frontend
+- **Framework**: Next.js 15 (App Router)
+- **Language**: TypeScript
+- **Styling**: TailwindCSS 4 + shadcn/ui
+- **UI Components**: @dnd-kit (이미지 순서 변경)
+- **상태 관리**: React Hook (no Redux)
+
+### Backend
+- **Server**: Next.js API Routes
+- **Auth**: JWT (jose library)
+- **Browser Automation**: Playwright (이웃 자동화)
+
+### AI/ML
+- **API 통합**:
+  - OpenAI: gpt-4o, gpt-4.5, gpt-4.5-mini
+  - Claude: Opus 4.6, Sonnet 4.5, Haiku 4.5
+  - Gemini: 3 Pro, 3 Flash
+- **이미지 처리**: Sharp
+- **웹 크롤링**: Cheerio (선택적)
+
+### 검색 API
+- **Naver Search API** (25,000건/일)
+- **Google Custom Search API** (100건/일)
+
+### Database
+- **없음** (상태 비저장)
+- **캐싱**: File system (.cache/), LRU Memory
+
+### 배포
+- **Platform**: Vercel
+- **Environment**: .env.local (로컬), Vercel 환경 변수 (프로덕션)
+
+---
+
+## 🔐 보안
+
+### 인증
+- 비밀번호 기반 로그인 (`wogns0513@`)
+- JWT 토큰 (24시간 유효)
+- HttpOnly 쿠키
+
+### API 보안
+- Rate Limiting (10 req/min per IP)
+- DOMPurify (XSS 방지)
+- Fetch Timeout (5초)
+- 타임아웃 관리 (AbortController)
+
+### 데이터 보안
+- .env.local은 절대 커밋 안함
+- API 키는 환경 변수로 관리
+- Naver 댓글 자동화는 로컬 개발 환경만
+
+---
+
+## 📊 주요 파일 구조
+
+```
+app/
+├── (auth)/login/                     # 로그인 페이지
+├── (protected)/
+│   ├── generate/page.tsx             # 메인 생성 페이지
+│   ├── format/page.tsx               # 스타일 관리
+│   └── neighbor/                     # 이웃 자동화
+│       ├── page.tsx                  # 홈
+│       └── comment-and-like/         # 댓글+좋아요
+├── api/
+│   ├── auth/login                    # 인증
+│   ├── blog/                         # 스타일 분석
+│   ├── generate/
+│   │   ├── analyze-images-expert/
+│   │   └── create-content-expert/
+│   ├── search/
+│   │   ├── web/
+│   │   └── recommendations/
+│   ├── maps/
+│   │   └── nearby-restaurants/       # 맛집 MAP API
+│   └── neighbor/                     # 이웃 자동화
+│
+components/
+├── expert/                           # 전문가 선택 UI
+│   ├── ExpertSelector.tsx
+│   ├── ModelSelector.tsx
+│   ├── CreativitySlider.tsx
+│   └── ExpertModeTab.tsx
+├── layout/
+└── form/
+│
+lib/
+├── experts/
+│   ├── definitions.ts                # 4개 전문가
+│   └── prompts.ts                    # 전문가 프롬프트
+├── search/
+│   ├── web-search.ts
+│   ├── fact-extractor.ts
+│   └── recommendations.ts
+├── maps/
+│   └── restaurant-api.ts             # MAP API
+├── naver/
+│   └── blog-automation.ts            # Playwright
+├── openai/
+│   ├── client.ts                     # 다중 모델
+│   ├── image-analyzer.ts
+│   ├── content-generator.ts
+│   └── prompts.ts
+└── utils/
+    ├── marker-parser.ts
+    ├── image-guide-generator.ts
+    ├── rate-limiter.ts
+    └── api-helpers.ts
+```
+
+---
+
+## ✅ 구현 상태
+
+### 완료 (Phase 20-23)
+- ✅ 4개 전문가 시스템
+- ✅ 웹 검색 + 추천
+- ✅ 다중 AI 모델 지원
+- ✅ 이웃 블로그 자동화 (댓글+좋아요)
+- ✅ 좋아요 상태 감지 정확화
+- ✅ 대기 시간 개선 (3분+)
+- ✅ 30초 간격 카운트다운
+- ✅ DOMPurify 보안
+- ✅ Rate Limiting
+
+### 향후 개선
+- ⏳ 댓글 생성 품질 향상
+- ⏳ 더 많은 추천 정보
+- ⏳ 웹 검색 결과 캐싱
+- ⏳ 사용자 통계 대시보드
+
+---
+
+## 🚀 개발 환경 설정
+
+```bash
+# 설치
+npm install
+
+# 개발 서버
+npm run dev
+
+# 빌드
+npm run build
+
+# 종합 검사
+npm run check-all  # TypeScript + Lint + Build
+```
+
+### 환경 변수
+```bash
+OPENAI_API_KEY=sk-proj-...
+AUTH_PASSWORD=wogns0513@
+SESSION_SECRET=<random-32-char>
+NAVER_CLIENT_ID=...
+NAVER_CLIENT_SECRET=...
+GOOGLE_CSE_ID=...
+GOOGLE_CSE_API_KEY=...
+BLOG_URL=https://blog.naver.com/username
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+---
+
+## 🧪 테스트 체크리스트
+
+### 이웃 자동화 테스트
+- [ ] 정확한 닉네임 필터링
+- [ ] 좋아요 상태 정확히 감지
+- [ ] iframe 내 댓글 제출
+- [ ] 3분 이상 대기
+- [ ] 30초 카운트다운
+
+### Expert System 테스트
+- [ ] 4개 전문가 모두 작동
+- [ ] 맛집: MAP API 통합
+- [ ] 웹 검색 옵션 동작
+- [ ] 다중 모델 선택 가능
+- [ ] Creativity 슬라이더 작동
+
+### 보안 테스트
+- [ ] XSS 방지 (DOMPurify)
+- [ ] Rate Limiting 작동
+- [ ] 5초 타임아웃
+- [ ] JWT 만료 처리
+
+---
+
+## 📝 최근 변경사항 (2026-02-16)
+
+### 버그 수정
+1. **좋아요 상태 감지 오류**
+   - 이웃 목록에서만 의존 → 글 페이지에서 실제 확인
+   - `aria-pressed` + 클래스 검증 추가
+   - 중복 좋아요 방지 (이미 눌려있으면 true 반환)
+
+2. **대기 시간 개선**
+   - 최소 3분 이상 보장
+   - 30초 간격 카운트다운
+   - 스팸 탐지 위험 감소
+
+### 코드 품질
+- ✅ TypeScript strict mode 통과
+- ✅ DOMPurify 보안 강화
+- ✅ Rate limiting 추가
+- ✅ Fetch timeout 관리
+
+---
+
+## 📞 Contact & Support
+
+- **Repository**: GitHub (skaukjh/blog_gener)
+- **Issue Tracking**: GitHub Issues
+- **Documentation**: CLAUDE.md, README.md
+
+---
+
+**Last Updated**: 2026-02-16
+**Version**: 2.0.0 (Expert System + Neighbor Automation)
+**Status**: Production Ready ✅

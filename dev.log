@@ -1,0 +1,66 @@
+
+> blog_project@1.0.0 dev
+> next dev
+
+ ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of C:\Users\김재훈\package-lock.json as the root directory.
+ To silence this warning, set `outputFileTracingRoot` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/output#caveats for more information.
+ Detected additional lockfiles: 
+   * C:\Users\김재훈\Desktop\blog_project\package-lock.json
+
+   ▲ Next.js 15.5.12
+   - Local:        http://localhost:3000
+   - Network:      http://192.168.45.39:3000
+   - Environments: .env.local, .env
+
+ ✓ Starting...
+ ✓ Ready in 1489ms
+ ○ Compiling /middleware ...
+ ✓ Compiled /middleware in 538ms (194 modules)
+ ○ Compiling / ...
+ ✓ Compiled / in 2.5s (545 modules)
+ HEAD / 307 in 2769ms
+ ✓ Compiled in 352ms (227 modules)
+ ✓ Compiled in 30ms (213 modules)
+ GET / 307 in 79ms
+ ○ Compiling /generate ...
+ ✓ Compiled /generate in 922ms (611 modules)
+ GET /generate 200 in 1181ms
+ ○ Compiling /api/auth/verify ...
+ ✓ Compiled /api/auth/verify in 503ms (717 modules)
+ GET /api/auth/verify 200 in 655ms
+ ✓ Compiled /api/blog/get-current-style in 426ms (760 modules)
+⚠️ 저장된 스타일이 없습니다
+🔍 Supabase에서 스타일 조회 중...
+✅ Supabase에서 스타일 로드 완료
+✅ 블로그 스타일 메모리 캐시 저장됨
+   만료 시간: 2026. 2. 16. 오후 1:22:08
+💾 Supabase 스타일을 메모리 캐시에 저장
+ GET /api/blog/get-current-style 200 in 1738ms
+✅ 메모리에서 스타일 로드됨
+📦 메모리 캐시에서 스타일 로드
+ GET /api/blog/get-current-style 200 in 18ms
+ ✓ Compiled /login in 269ms (771 modules)
+ GET /login 200 in 493ms
+ ○ Compiling /api/auth/login ...
+ ✓ Compiled /api/auth/login in 532ms (790 modules)
+ POST /api/auth/login 200 in 652ms
+ GET /generate 200 in 70ms
+ GET /api/auth/verify 200 in 20ms
+ GET /api/auth/verify 200 in 17ms
+ ✓ Compiled /format in 368ms (801 modules)
+ GET /format 200 in 499ms
+ ○ Compiling /api/blog/analyze-style ...
+ ✓ Compiled /api/blog/analyze-style in 774ms (931 modules)
+(node:31384) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✅ 블로그 스타일 메모리 캐시 저장됨
+   만료 시간: 2026. 2. 16. 오후 1:23:29
+✅ 블로그 스타일 메모리 캐시 저장 완료
+✅ Supabase 스타일 업데이트 완료
+✅ Supabase 스타일 저장 완료
+OPENAI_ASSISTANT_ID가 설정되지 않았습니다
+ POST /api/blog/analyze-style 200 in 7191ms
+ GET /generate 200 in 95ms
+ GET /api/auth/verify 401 in 23ms

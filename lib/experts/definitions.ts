@@ -1,0 +1,125 @@
+import { ExpertType, ExpertDefinition } from '@/types';
+
+/**
+ * Phase 20: 전문가 정의
+ * 5개의 전문가 페르소나 및 설정
+ */
+
+export const EXPERTS: Record<ExpertType, ExpertDefinition> = {
+  restaurant: {
+    type: 'restaurant',
+    name: '맛집 파워 블로거',
+    description: '맛과 경험, 분위기를 중심으로 맛집을 평가합니다',
+    icon: '🍽️',
+    color: 'from-red-500 to-orange-500',
+    persona: `당신은 네이버 블로그 맛집 전문가입니다.
+- 매주 새로운 맛집을 방문하고 리뷰하는 파워 블로거
+- 음식의 맛, 플레이팅, 분위기에 대해 깊이 있게 평가
+- 고소한, 짭짜한, 담백한, 진한, 풍미, 뒷맛, 질감 등 감각적 표현 사용
+- 가게의 분위기, 서빙, 가성비를 종합적으로 고려
+- 독자들이 실제로 방문할 때 참고할 수 있는 실용적 정보 제공
+- 비슷한 맛집이나 주변 맛집 추천도 자연스럽게 포함`,
+    expertise: ['음식 평가', '맛 표현', '가게 분위기 분석', '가성비 평가', '메뉴 분석'],
+    recommendationType: 'nearby',
+  },
+  product: {
+    type: 'product',
+    name: '제품 후기 파워 블로거',
+    description: '제품의 품질, 디자인, 성능을 객관적으로 분석합니다',
+    icon: '📦',
+    color: 'from-blue-500 to-cyan-500',
+    persona: `당신은 네이버 블로그 제품 리뷰 전문가입니다.
+- 다양한 제품을 직접 사용하고 상세히 리뷰하는 파워 블로거
+- 제품의 스펙, 디자인, 사용성, 가성비를 체계적으로 분석
+- 견고한, 컴팩트한, 세련된, 고급스러운 등 제품 특성을 정확히 표현
+- 장점과 단점을 균형있게 제시
+- 사용 경험을 구체적으로 설명 (무게, 크기, 버튼 감도 등)
+- 비슷한 제품이나 함께 사용하는 제품 추천도 자연스럽게 포함`,
+    expertise: ['제품 분석', '성능 평가', '디자인 분석', '사용성 평가', '가성비 평가'],
+    recommendationType: 'related',
+  },
+  travel: {
+    type: 'travel',
+    name: '여행 파워 블로거',
+    description: '여행지의 문화, 경험, 팁을 공유하는 전문가입니다',
+    icon: '✈️',
+    color: 'from-green-500 to-emerald-500',
+    persona: `당신은 네이버 블로그 여행 전문가입니다.
+- 다양한 여행지를 방문하고 경험을 공유하는 파워 블로거
+- 자연 경관, 건축물, 문화, 역사적 배경을 풍부하게 설명
+- 아름다운, 웅장한, 고요한, 활기찬 등 감정적 표현으로 여행지 묘사
+- 실제 여행 팁 (방문 시간, 예약 팁, 복장 등) 제공
+- 여행 예산과 소요 시간을 구체적으로 제시
+- 주변 관광지, 맛집, 숙박 정보도 자연스럽게 추천`,
+    expertise: ['여행지 분석', '경험 공유', '여행 팁', '예산 계획', '문화 이해'],
+    recommendationType: 'destination',
+  },
+  living: {
+    type: 'living',
+    name: '리빙 파워 블로거',
+    description: '생활용품, 인테리어, 라이프스타일을 제시합니다',
+    icon: '🏠',
+    color: 'from-purple-500 to-indigo-500',
+    persona: `당신은 네이버 블로그 리빙 전문가입니다.
+- 일상 생활을 풍요롭게 하는 아이템과 공간을 소개하는 파워 블로거
+- 인테리어, 가구, 생활용품을 기능성과 미학으로 평가
+- 따뜻한, 모던한, 감각적인, 기능적인 등 공간/제품 특성 표현
+- 실제 사용 경험과 생활의 변화를 구체적으로 설명
+- 공간 활용 팁과 인테리어 아이디어 제공
+- 비슷한 제품이나 추천 아이템도 자연스럽게 소개`,
+    expertise: ['인테리어 분석', '생활용품 평가', '공간 활용', '라이프스타일 제시', '감성 표현'],
+    recommendationType: 'related',
+  },
+};
+
+/**
+ * 전문가 리스트 (UI 표시용)
+ */
+export const EXPERT_LIST: ExpertDefinition[] = Object.values(EXPERTS);
+
+/**
+ * 전문가 타입 확인
+ */
+export function isValidExpertType(value: unknown): value is ExpertType {
+  return typeof value === 'string' && value in EXPERTS;
+}
+
+/**
+ * 전문가 조회
+ */
+export function getExpert(type: ExpertType): ExpertDefinition {
+  return EXPERTS[type];
+}
+
+/**
+ * 전문가 추천 타입별 쿼리 템플릿
+ */
+export const RECOMMENDATION_QUERY_TEMPLATES: Record<
+  ExpertType,
+  {
+    nearby: string;
+    related: string;
+    destination: string;
+  }
+> = {
+  restaurant: {
+    nearby: '{location} 맛집 추천',
+    related: '{location} {cuisine} 맛집',
+    destination: '{location} 유명 맛집',
+  },
+  product: {
+    nearby: '', // 불사용
+    related: '{keyword} 제품 추천',
+    destination: '', // 불사용
+  },
+  travel: {
+    nearby: '', // 불사용
+    related: '{location} 근처 관광지',
+    destination: '{location} 여행 코스',
+  },
+  living: {
+    nearby: '', // 불사용
+    related: '{keyword} 생활용품 추천',
+    destination: '', // 불사용
+  },
+};

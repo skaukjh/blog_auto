@@ -1,0 +1,81 @@
+@import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  min-height: 100vh;
+  background-attachment: fixed;
+}
+
+code {
+  font-family: 'Courier New', monospace;
+}
+
+/* 커스텀 스크롤바 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #F4A460 0%, #FF6B6B 100%);
+  border-radius: 5px;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.1);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #FF8C42 0%, #FF5252 100%);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.15);
+}
+
+/* 부드러운 트랜지션 */
+@layer components {
+  .smooth-transition {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .glass-effect {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+  }
+
+  .gradient-primary {
+    background: linear-gradient(135deg, #F4A460 0%, #FF6B6B 100%);
+  }
+
+  .gradient-text {
+    background: linear-gradient(135deg, #F4A460 0%, #FF6B6B 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .shadow-soft {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  }
+
+  .shadow-md-soft {
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.06);
+  }
+}
