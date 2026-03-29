@@ -363,9 +363,9 @@ async function addBuddiesWithPlaywright(
 
           console.log(`[서로이웃] ✅ 서로이웃 신청 완료 (${totalAdded}/${maxCount})`);
 
-          // 다음 신청 전 대기 (스팸 방지)
+          // 다음 신청 전 대기 (스팸 방지: 10~60초 랜덤)
           if (totalAdded < maxCount) {
-            const waitSec = Math.floor(Math.random() * 3) + 3; // 3~5초
+            const waitSec = Math.floor(Math.random() * 51) + 10; // 10~60초
             console.log(`[서로이웃] ${waitSec}초 대기 중...`);
             await page.waitForTimeout(waitSec * 1000);
           }
