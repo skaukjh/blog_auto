@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Navigation from '@/components/layout/Navigation';
-import { AlertCircle, X, Plus, Trash2 } from 'lucide-react';
+import { AlertCircle, X, Plus, Trash2, RefreshCw } from 'lucide-react';
 import type { NeighborCommentResult } from '@/types/index';
 
 export default function NeighborCommentAndLikePage() {
@@ -21,6 +21,16 @@ export default function NeighborCommentAndLikePage() {
   const [loadingTargetList, setLoadingTargetList] = useState(false);
   const [targetListError, setTargetListError] = useState('');
   const [targetListSuccess, setTargetListSuccess] = useState('');
+
+  // 동기화 관련 상태
+  const [syncBlogId, setSyncBlogId] = useState('');
+  const [syncPassword, setSyncPassword] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{
+    totalFetched: number;
+    totalAdded: number;
+    addedNicknames: string[];
+  } | null>(null);
 
   // 초기 로드: 저장된 닉네임 목록 불러오기
   useEffect(() => {
@@ -134,6 +144,49 @@ export default function NeighborCommentAndLikePage() {
     }
   };
 
+  const handleSync = async () => {
+    if (!syncBlogId.trim() || !syncPassword.trim()) {
+      setTargetListError('동기화할 네이버 ID와 비밀번호를 입력하세요.');
+      return;
+    }
+    setIsSyncing(true);
+    setSyncResult(null);
+    setTargetListError('');
+    setTargetListSuccess('');
+
+    try {
+      const response = await fetch('/api/neighbor/sync-buddy-list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blogId: syncBlogId.trim(), blogPassword: syncPassword }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        setTargetListError(data.error || '동기화 중 오류가 발생했습니다.');
+        return;
+      }
+
+      setTargetNicknames(data.allNicknames || []);
+      setSyncResult({
+        totalFetched: data.totalFetched,
+        totalAdded: data.totalAdded,
+        addedNicknames: data.addedNicknames,
+      });
+      setTargetListSuccess(
+        `동기화 완료: 네이버 서로이웃 ${data.totalFetched}명 확인, ${data.totalAdded}명 신규 추가`
+      );
+      setSyncBlogId('');
+      setSyncPassword('');
+      setTimeout(() => setTargetListSuccess(''), 5000);
+    } catch (err) {
+      setTargetListError(err instanceof Error ? err.message : '알 수 없는 오류');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -234,7 +287,75 @@ export default function NeighborCommentAndLikePage() {
               </div>
             )}
 
-            {/* 초기화 버튼 */}
+            {/* 이웃 동기화 섹션 */}
+            <div className="mb-6 p-4 bg-white border border-amber-300 rounded-lg">
+              <h3 className="font-semibold text-amber-900 mb-3 flex items-center gap-2">
+                <RefreshCw className="w-4 h-4" />
+                네이버 서로이웃 자동 동기화
+              </h3>
+              <p className="text-xs text-amber-700 mb-3">
+                네이버 이웃 관리 페이지에서 서로이웃 목록을 가져와, 목록에 없는 이웃을 자동으로 추가합니다.
+              </p>
+              <div className="flex flex-col gap-2 mb-3">
+                <input
+                  type="text"
+                  value={syncBlogId}
+                  onChange={(e) => setSyncBlogId(e.target.value)}
+                  placeholder="네이버 ID"
+                  className="px-3 py-2 border border-amber-200 rounded-lg text-sm focus:outline-none focus:border-amber-500"
+                  disabled={isSyncing}
+                />
+                <input
+                  type="password"
+                  value={syncPassword}
+                  onChange={(e) => setSyncPassword(e.target.value)}
+                  placeholder="비밀번호"
+                  className="px-3 py-2 border border-amber-200 rounded-lg text-sm focus:outline-none focus:border-amber-500"
+                  disabled={isSyncing}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleSync}
+                disabled={isSyncing || !syncBlogId.trim() || !syncPassword.trim()}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 smooth-transition flex items-center justify-center gap-2"
+              >
+                {isSyncing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    동기화 중... (브라우저 창 확인)
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4" />
+                    🔄 서로이웃 목록 동기화
+                  </>
+                )}
+              </button>
+
+              {/* 동기화 결과 */}
+              {syncResult && (
+                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+                  <p className="font-semibold text-blue-900 mb-1">동기화 결과</p>
+                  <p className="text-blue-700">네이버 서로이웃: {syncResult.totalFetched}명</p>
+                  <p className="text-blue-700">신규 추가: {syncResult.totalAdded}명</p>
+                  {syncResult.addedNicknames.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-blue-600 font-medium">추가된 이웃:</p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {syncResult.addedNicknames.map((n) => (
+                          <span key={n} className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
+                            {n}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 파일에서 로드 버튼 */}
             <div className="mb-6">
               <button
                 type="button"
