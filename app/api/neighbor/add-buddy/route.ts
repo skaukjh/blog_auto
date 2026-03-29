@@ -218,7 +218,7 @@ async function addBuddiesWithPlaywright(
           }
 
           await buddyPopupPage.waitForLoadState('domcontentloaded');
-          await buddyPopupPage.waitForTimeout(2000);
+          await page.waitForTimeout(2000);
 
           // 팝업 URL에서 실제 blogId 추출 (outer 변수 갱신)
           const popupUrl = buddyPopupPage.url();
@@ -284,7 +284,7 @@ async function addBuddiesWithPlaywright(
 
             if (labelCount > 0) {
               await radioLabel.click();
-              await buddyPopupPage.waitForTimeout(800);
+              await page.waitForTimeout(800);
             } else {
               // label이 없으면 JavaScript로 직접 선택
               await buddyPopupPage.evaluate(() => {
@@ -295,7 +295,7 @@ async function addBuddiesWithPlaywright(
                   radio.dispatchEvent(new Event('click', { bubbles: true }));
                 }
               });
-              await buddyPopupPage.waitForTimeout(800);
+              await page.waitForTimeout(800);
             }
 
             // checked 상태 확인
@@ -314,21 +314,22 @@ async function addBuddiesWithPlaywright(
 
           // 7단계: 다음 버튼 클릭
           console.log('[서로이웃] 첫번째 다음 버튼 클릭...');
-          const nextBtn1 = await buddyPopupPage.locator(
+          const nextBtn1 = buddyPopupPage.locator(
             '#content > div > form > fieldset > div.area_button > a.button_next._buddyAddNext'
           ).first();
-          await nextBtn1.click();
-          await buddyPopupPage.waitForTimeout(2000);
+          await nextBtn1.click().catch(() => {});
+          await page.waitForTimeout(2000);
 
           // 8단계: 페이지 전환 확인
-          console.log(`[서로이웃] 전환 후 URL: ${buddyPopupPage.url()}`);
+          const afterNextUrl = await buddyPopupPage.url().catch?.(() => '') ?? buddyPopupPage.url();
+          console.log(`[서로이웃] 전환 후 URL: ${afterNextUrl}`);
 
           // 9단계: 인사말 입력
           console.log('[서로이웃] 인사말 입력 중...');
           try {
-            const messageInput = await buddyPopupPage.locator('#message').first();
+            const messageInput = buddyPopupPage.locator('#message').first();
             await messageInput.fill(greetingMessage);
-            await buddyPopupPage.waitForTimeout(500);
+            await page.waitForTimeout(500);
           } catch (msgErr) {
             console.log('[서로이웃] 인사말 입력 실패, 계속 진행:', msgErr);
           }
