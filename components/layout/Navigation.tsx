@@ -96,6 +96,16 @@ export default function Navigation() {
                       <span>💬</span>
                       댓글+좋아요
                     </button>
+                    <button
+                      onClick={() => {
+                        router.push('/neighbor/add-buddy');
+                        setIsNeighborOpen(false);
+                      }}
+                      className="w-full px-4 py-2 text-left text-gray-700 hover:bg-gray-50 flex items-center gap-2 smooth-transition"
+                    >
+                      <span>🤝</span>
+                      서로이웃 추가
+                    </button>
                   </div>
                 )}
               </div>
