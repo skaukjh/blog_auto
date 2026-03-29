@@ -328,9 +328,10 @@ async function addBuddiesWithPlaywright(
           const afterNextUrl = buddyPopupPage.url();
           console.log(`[서로이웃] 전환 후 URL: ${afterNextUrl}`);
 
-          // 9단계: 인사말 입력
+          // 9단계: 인사말 입력 (#message 요소가 로드될 때까지 대기 후 입력)
           console.log('[서로이웃] 인사말 입력 중...');
           try {
+            await buddyPopupPage.waitForSelector('#message', { timeout: 5000 });
             const messageInput = buddyPopupPage.locator('#message').first();
             await messageInput.fill(greetingMessage);
             await page.waitForTimeout(500);
@@ -368,11 +369,20 @@ async function addBuddiesWithPlaywright(
 
           console.log(`[서로이웃] ✅ 서로이웃 신청 완료 (${totalAdded}/${maxCount})`);
 
-          // 다음 신청 전 대기 (스팸 방지: 10~60초 랜덤)
+          // 다음 신청 전 대기 (스팸 방지: 10~60초 랜덤, 10초 단위로 남은 시간 표시)
           if (totalAdded < maxCount) {
             const waitSec = Math.floor(Math.random() * 51) + 10; // 10~60초
-            console.log(`[서로이웃] ${waitSec}초 대기 중...`);
-            await page.waitForTimeout(waitSec * 1000);
+            console.log(`[서로이웃] 다음 신청까지 ${waitSec}초 대기...`);
+            let elapsed = 0;
+            while (elapsed < waitSec) {
+              const remaining = waitSec - elapsed;
+              if (elapsed > 0 && remaining % 10 === 0) {
+                console.log(`[서로이웃] 남은 대기 시간: ${remaining}초`);
+              }
+              const step = Math.min(10, remaining);
+              await page.waitForTimeout(step * 1000);
+              elapsed += step;
+            }
           }
         } catch (err) {
           totalFailed++;
