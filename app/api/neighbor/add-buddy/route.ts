@@ -333,26 +333,26 @@ async function addBuddiesWithPlaywright(
             console.log('[서로이웃] 인사말 입력 실패, 계속 진행:', msgErr);
           }
 
-          // 10단계: 두 번째 다음 버튼 클릭
+          // 10단계: 두 번째 다음 버튼 클릭 (클릭 후 팝업이 자동 닫힐 수 있으므로 오류 무시)
           console.log('[서로이웃] 두번째 다음 버튼 클릭...');
-          const nextBtn2 = await buddyPopupPage.locator('a.button_next._addBothBuddy').first();
-          await nextBtn2.click();
-          await buddyPopupPage.waitForTimeout(3000);
+          const nextBtn2 = buddyPopupPage.locator('a.button_next._addBothBuddy').first();
+          await nextBtn2.click().catch(() => {});
+          await page.waitForTimeout(2000);
 
-          // 11단계: 닫기 버튼 클릭
+          // 11단계: 닫기 버튼 클릭 (팝업이 닫히면 페이지 객체가 무효화되므로 오류 무시)
           console.log('[서로이웃] 닫기 버튼 클릭...');
           try {
-            const closeBtn = await buddyPopupPage.locator(
-              '#content > div > div.area_button > a'
-            ).first();
-            await closeBtn.click();
-            await buddyPopupPage.waitForTimeout(1000);
-          } catch (closeErr) {
-            console.log('[서로이웃] 닫기 버튼 실패, 강제 닫기:', closeErr);
+            const closeBtn = buddyPopupPage.locator('#content > div > div.area_button > a').first();
+            await closeBtn.click().catch(() => {});
+          } catch {
+            // 닫기 버튼 클릭 실패 시 무시 (팝업이 이미 닫혔을 수 있음)
+          } finally {
             await buddyPopupPage.close().catch(() => {});
           }
 
           buddyPopupPage = null;
+          // 닫기 후 대기는 팝업이 아닌 메인 페이지에서 수행
+          await page.waitForTimeout(1000);
 
           totalAdded++;
           details.push({
