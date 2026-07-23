@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import blogStyleCache from "@/lib/utils/blog-style-memory-cache";
-import { getBlogStyleFromSupabase } from "@/lib/utils/style-storage";
+import { getBlogStyleFromFile } from "@/lib/utils/style-storage";
 
 export async function GET() {
   try {
@@ -24,15 +24,15 @@ export async function GET() {
       );
     }
 
-    // 2. Supabase에서 스타일 조회 (메모리 캐시가 없을 경우)
-    console.log("🔍 Supabase에서 스타일 조회 중...");
-    const supabaseData = await getBlogStyleFromSupabase();
+    // 2. data/blog-style.txt 에서 조회 (메모리 캐시가 없을 경우)
+    console.log("🔍 data/blog-style.txt 에서 스타일 조회 중...");
+    const fileData = getBlogStyleFromFile();
 
-    if (supabaseData) {
-      // Supabase에서 받은 스타일을 메모리 캐시에 저장
+    if (fileData) {
+      // 파일에서 읽은 스타일을 메모리 캐시에 저장
       try {
-        blogStyleCache.set(supabaseData.style);
-        console.log("💾 Supabase 스타일을 메모리 캐시에 저장");
+        blogStyleCache.set(fileData.style);
+        console.log("💾 파일 스타일을 메모리 캐시에 저장");
       } catch (cacheErr) {
         console.warn("⚠️ 메모리 캐시 저장 실패:", cacheErr);
       }
@@ -40,10 +40,10 @@ export async function GET() {
       return NextResponse.json(
         {
           success: true,
-          style: supabaseData.style,
+          style: fileData.style,
           exists: true,
-          source: "supabase",
-          analyzedAt: supabaseData.analyzedAt,
+          source: "file",
+          analyzedAt: fileData.analyzedAt,
         },
         { status: 200 }
       );

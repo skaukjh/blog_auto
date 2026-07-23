@@ -12,6 +12,7 @@ export default function FormatPage() {
   const [compactStyle, setCompactStyle] = useState<string | null>(null);
   const [analyzedAt, setAnalyzedAt] = useState<string | null>(null);
   const [cost, setCost] = useState<{ usd: number; krw: number } | null>(null);
+  const [persisted, setPersisted] = useState(false); // data/blog-style.txt 기록 성공 여부
   const [success, setSuccess] = useState(false);
   const [savedStyle, setSavedStyle] = useState<string | null>(null);
   const [savedDate, setSavedDate] = useState<string | null>(null);
@@ -97,6 +98,7 @@ export default function FormatPage() {
       setCompactStyle(data.compactStyle);
       setAnalyzedAt(data.analyzedAt);
       setCost(data.cost || null);
+      setPersisted(Boolean(data.persisted));
       setSavedStyle(data.compactStyle);
       const nowDate = new Date().toLocaleString('ko-KR');
       setSavedDate(nowDate);
@@ -264,14 +266,25 @@ export default function FormatPage() {
               </div>
 
               {/* 저장 위치 정보 */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
-                <p className="text-sm text-blue-800">
-                  <strong>☁️ Supabase:</strong> 스타일이 클라우드 데이터베이스에 저장되었습니다 (Vercel 환경 호환)
+              <div className={`rounded-lg p-4 space-y-2 border ${
+                persisted
+                  ? 'bg-blue-50 border-blue-200'
+                  : 'bg-amber-50 border-amber-300'
+              }`}>
+                {persisted ? (
+                  <p className="text-sm text-blue-800">
+                    <strong>📄 파일:</strong> <code>data/blog-style.txt</code> 에 저장되었습니다
+                  </p>
+                ) : (
+                  <p className="text-sm text-amber-900">
+                    <strong>⚠️ 파일 저장 불가:</strong> 배포 환경은 파일시스템이 읽기 전용입니다.
+                    영구 반영하려면 로컬에서 분석 후 <code>data/blog-style.txt</code> 를 커밋해 재배포하세요.
+                  </p>
+                )}
+                <p className={`text-sm ${persisted ? 'text-blue-800' : 'text-amber-900'}`}>
+                  <strong>📱 브라우저:</strong> sessionStorage에도 저장되어 이번 세션에서 즉시 사용 가능합니다
                 </p>
-                <p className="text-sm text-blue-800">
-                  <strong>📱 로컬:</strong> sessionStorage에도 저장되어 즉시 사용 가능합니다
-                </p>
-                <p className="text-sm text-blue-800">
+                <p className={`text-sm ${persisted ? 'text-blue-800' : 'text-amber-900'}`}>
                   <strong>🤖 Assistant:</strong> OpenAI Assistant의 instruction에도 반영되었습니다.
                 </p>
               </div>

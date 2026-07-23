@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { analyzeStyleCompact } from "@/lib/openai/blog-analyzer";
 import { updateAssistantInstructions } from "@/lib/openai/assistant";
 import blogStyleCache from "@/lib/utils/blog-style-memory-cache";
-import { saveBlogStyleToSupabase } from "@/lib/utils/style-storage";
+import { saveBlogStyleToFile } from "@/lib/utils/style-storage";
 import type { BlogPost } from "@/types/index";
 
 interface AnalyzeStyleCompactRequest {
@@ -19,6 +19,8 @@ interface AnalyzeStyleCompactResponse {
   success: boolean;
   compactStyle?: string;
   analyzedAt?: string;
+  /** data/blog-style.txt 에 실제로 기록됐는지 여부 (배포 환경에서는 false) */
+  persisted?: boolean;
   cost?: {
     usd: number;
     krw: number;
@@ -98,17 +100,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<AnalyzeSt
       throw new Error(`스타일 캐시 저장 실패: ${cacheErr instanceof Error ? cacheErr.message : "알 수 없는 오류"}`);
     }
 
-    // Supabase에 스타일 저장 (Vercel 환경 호환)
+    // data/blog-style.txt 에 저장 (배포 환경은 읽기 전용이라 실패할 수 있음)
+    let persisted = false;
     try {
-      const saved = await saveBlogStyleToSupabase(compactStyle);
-      if (saved) {
-        console.log("✅ Supabase 스타일 저장 완료");
-      } else {
-        console.warn("⚠️ Supabase 저장 실패했지만 계속 진행합니다");
+      persisted = saveBlogStyleToFile(compactStyle);
+      if (!persisted) {
+        console.warn("⚠️ 스타일 파일 저장 실패 - 메모리 캐시로만 진행합니다");
       }
-    } catch (supabaseErr) {
-      console.warn("⚠️ Supabase 저장 오류:", supabaseErr);
-      // Supabase 오류는 무시하고 계속 진행 (메모리 캐시로 충분)
+    } catch (fileErr) {
+      console.warn("⚠️ 스타일 파일 저장 오류:", fileErr);
+      // 파일 저장 실패는 무시하고 계속 진행 (메모리 캐시 + 클라이언트 sessionStorage로 충분)
     }
 
     // Assistant의 instructions 업데이트
@@ -161,11 +162,14 @@ Always follow these priorities in order: Sentence endings → Image descriptions
         success: true,
         compactStyle,
         analyzedAt,
+        persisted,
         cost: {
           usd: parseFloat(styleAnalysisCostUSD.toFixed(4)),
           krw: styleAnalysisCostKRW,
         },
-        message: "블로그 스타일 분석이 완료되었습니다",
+        message: persisted
+          ? "블로그 스타일 분석이 완료되어 data/blog-style.txt에 저장되었습니다"
+          : "블로그 스타일 분석이 완료되었습니다 (파일 저장 불가 - 이번 세션에서만 유지됩니다)",
       },
       { status: 200 }
     );
