@@ -12,7 +12,7 @@ export default function FormatPage() {
   const [compactStyle, setCompactStyle] = useState<string | null>(null);
   const [analyzedAt, setAnalyzedAt] = useState<string | null>(null);
   const [cost, setCost] = useState<{ usd: number; krw: number } | null>(null);
-  const [persisted, setPersisted] = useState(false); // data/blog-style.txt 기록 성공 여부
+  const [persisted, setPersisted] = useState(false); // Supabase 저장 성공 여부
   const [success, setSuccess] = useState(false);
   const [savedStyle, setSavedStyle] = useState<string | null>(null);
   const [savedDate, setSavedDate] = useState<string | null>(null);
@@ -273,12 +273,12 @@ export default function FormatPage() {
               }`}>
                 {persisted ? (
                   <p className="text-sm text-blue-800">
-                    <strong>📄 파일:</strong> <code>data/blog-style.txt</code> 에 저장되었습니다
+                    <strong>☁️ Supabase:</strong> 스타일이 저장되어 어디서든 사용할 수 있습니다
                   </p>
                 ) : (
                   <p className="text-sm text-amber-900">
-                    <strong>⚠️ 파일 저장 불가:</strong> 배포 환경은 파일시스템이 읽기 전용입니다.
-                    영구 반영하려면 로컬에서 분석 후 <code>data/blog-style.txt</code> 를 커밋해 재배포하세요.
+                    <strong>⚠️ DB 저장 실패:</strong> Supabase 연결을 확인하세요.
+                    이번 세션에서는 사용 가능하지만 새로고침하면 사라집니다.
                   </p>
                 )}
                 <p className={`text-sm ${persisted ? 'text-blue-800' : 'text-amber-900'}`}>

@@ -5,9 +5,10 @@
   "description": "네이버 블로그 이웃 자동화 (로컬 전용) - 좋아요 / 댓글 / 서로이웃 추가",
   "type": "module",
   "scripts": {
-    "dev": "next dev -p 3001",
+    "dev": "next dev -p 80",
     "build": "next build",
-    "start": "next start -p 3001",
+    "start": "next start -p 80",
+    "dev:3001": "next dev -p 3001",
     "test:neighbor": "tsx scripts/test-neighbor.ts"
   },
   "dependencies": {
