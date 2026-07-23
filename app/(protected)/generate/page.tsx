@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, Suspense, lazy } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import Navigation from '@/components/layout/Navigation';
 import { Sparkles, Copy, Download, AlertCircle, ChevronDown, Check, X } from 'lucide-react';
-import type { KeywordItem, ImageAnalysisResult, ChatMessage, MenuInfo, ExpertType, ModelConfig, WebSearchResult, RecommendationItem, PlaceInfo, ProductInfo } from '@/types/index';
+import type { KeywordItem, ImageAnalysisResult, ChatMessage, ExpertType, ModelConfig, WebSearchResult, RecommendationItem, PlaceInfo, ProductInfo } from '@/types/index';
 import { generateClientImageGuides } from '@/lib/utils/client-image-guide';
-import { copyToClipboard } from '@/lib/utils/download';
+import { copyToClipboard, triggerDownload } from '@/lib/utils/download';
 
 // 동적 임포트: ExpertModeTab 및 자식 컴포넌트를 별도 청크로 분리
 const ExpertModeTab = dynamic(() => import('@/components/expert/ExpertModeTab').then(mod => ({ default: mod.ExpertModeTab })), {
@@ -22,7 +22,6 @@ export default function GeneratePage() {
   const [startSentence, setStartSentence] = useState('');
   const [endSentence, setEndSentence] = useState('');
   const [loading, setLoading] = useState(false);
-  const [loadingStep, setLoadingStep] = useState<'compress' | 'analyze' | 'generate' | null>(null);
   const [error, setError] = useState('');
   const [result, setResult] = useState<{ content: string; imageAnalysis: ImageAnalysisResult; wordCount: number; keywordCounts: Record<string, number>; cost?: { usd: number; krw: number; breakdown?: { imageAnalysis: { usd: number; krw: number }; contentGeneration: { usd: number; krw: number } } } } | null>(null);
   const [savedStyle, setSavedStyle] = useState<string | null>(null);
@@ -32,13 +31,7 @@ export default function GeneratePage() {
   const [refineInput, setRefineInput] = useState('');
   const [isRefining, setIsRefining] = useState(false);
   const [imageAnalysisResult, setImageAnalysisResult] = useState<ImageAnalysisResult | null>(null);
-  const [placeName, setPlaceName] = useState('');
-  const [placeInfo, setPlaceInfo] = useState<any | null>(null);
-  const [loadingPlace, setLoadingPlace] = useState(false);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [menuInput, setMenuInput] = useState('');
-  const [showMenuInput, setShowMenuInput] = useState(false);
-  const [selectedReviews, setSelectedReviews] = useState<number[]>([]); // 선택된 리뷰 인덱스
 
   // 초기 로드 시 저장된 스타일 조회 (sessionStorage 우선)
   useEffect(() => {
@@ -146,147 +139,6 @@ export default function GeneratePage() {
     });
   }, []);
 
-  // 메뉴 정보 파싱 (메뉴명 | 가격 형식)
-  const parseMenuInput = useCallback((): MenuInfo[] => {
-    if (!menuInput.trim()) return [];
-
-    return menuInput
-      .split('\n')
-      .filter((line) => line.trim())
-      .map((line) => {
-        const parts = line.split('|').map((p) => p.trim());
-        return {
-          name: parts[0] || '',
-          price: parts[1] || undefined,
-          description: '', // 설명은 빈 문자열
-        };
-      })
-      .filter((menu) => menu.name); // 이름이 있는 메뉴만
-  }, [menuInput]);
-
-  const handleGenerate = useCallback(async () => {
-    setError('');
-    setLoading(true);
-    setLoadingStep('compress');
-
-    try {
-      if (!topic.trim()) {
-        throw new Error('주제를 입력해주세요');
-      }
-
-      if (images.length === 0) {
-        throw new Error('최소 1장 이상의 이미지를 업로드해주세요');
-      }
-
-      if (keywords.length === 0) {
-        throw new Error('최소 1개의 키워드를 추가해주세요');
-      }
-
-      const base64Images: string[] = [];
-      for (let i = 0; i < images.length; i++) {
-        try {
-          const compressedData = await compressImage(images[i]);
-          base64Images.push(compressedData);
-        } catch (err) {
-          console.error(`이미지 ${i + 1} 압축 실패:`, err);
-          // 압축 실패 시 원본 이미지로 진행
-          const data = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-              resolve(reader.result as string);
-            };
-            reader.readAsDataURL(images[i]);
-          });
-          base64Images.push(data);
-        }
-      }
-
-      setLoadingStep('analyze');
-      const imageResponse = await fetch('/api/generate/analyze-images', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ images: base64Images, topic }),
-      });
-
-      if (!imageResponse.ok) {
-        const data = await imageResponse.json();
-        throw new Error(data.error || '이미지 분석 실패');
-      }
-
-      const imageData = await imageResponse.json();
-
-      setLoadingStep('generate');
-
-      // 메뉴 정보 파싱 및 placeInfo에 추가
-      const menus = parseMenuInput();
-
-      // 선택된 리뷰만 필터링
-      const filteredReviews = placeInfo?.reviews
-        ? placeInfo.reviews.filter((_: any, idx: number) => selectedReviews.includes(idx))
-        : [];
-
-      const placeInfoWithMenus = placeInfo
-        ? {
-            ...placeInfo,
-            menus,
-            reviews: filteredReviews, // 선택된 리뷰만 전달
-          }
-        : undefined;
-
-      const contentResponse = await fetch('/api/generate/create-content', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          topic,
-          length,
-          keywords,
-          imageAnalysis: imageData.analysis,
-          startSentence: startSentence || undefined,
-          endSentence: endSentence || undefined,
-          placeInfo: placeInfoWithMenus || undefined,
-        }),
-      });
-
-      if (!contentResponse.ok) {
-        const data = await contentResponse.json();
-        throw new Error(data.error || '콘텐츠 생성 실패');
-      }
-
-      // 응답 텍스트 크기 확인
-      const responseText = await contentResponse.text();
-      console.log('API 응답 크기:', responseText.length, 'bytes');
-
-      try {
-        const contentData = JSON.parse(responseText);
-        setResult({
-          content: contentData.content.content,
-          imageAnalysis: imageData.analysis,
-          wordCount: contentData.content.wordCount,
-          keywordCounts: contentData.content.keywordCounts,
-          cost: contentData.cost,
-        });
-        setImageAnalysisResult(imageData.analysis);
-        setChatHistory([]);
-        setRefineInput('');
-        setError('');
-        setLoadingStep(null);
-      } catch (parseError) {
-        console.error('JSON 파싱 실패:', {
-          errorMessage: parseError instanceof Error ? parseError.message : '알 수 없음',
-          responseSize: responseText.length,
-          firstChars: responseText.substring(0, 200),
-          lastChars: responseText.substring(Math.max(0, responseText.length - 200)),
-        });
-        throw new Error('응답 데이터 처리 실패 - 응답 크기가 너무 큽니다');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '오류가 발생했습니다');
-    } finally {
-      setLoading(false);
-      setLoadingStep(null);
-    }
-  }, [topic, images, keywords, startSentence, endSentence, length, placeInfo, selectedReviews, menuInput, parseMenuInput, compressImage]);
-
   // Phase 20: 전문가 모드 글 생성
   const handleGenerateExpert = useCallback(async (params: {
     expertType: ExpertType;
@@ -311,7 +163,6 @@ export default function GeneratePage() {
 
     setLoading(true);
     setError('');
-    setLoadingStep('compress');
 
     try {
       // 1. 이미지 압축
@@ -322,7 +173,6 @@ export default function GeneratePage() {
       }
 
       // 2. 전문가별 이미지 분석
-      setLoadingStep('analyze');
       const analyzeResponse = await fetch('/api/generate/analyze-images-expert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -342,7 +192,6 @@ export default function GeneratePage() {
       }
 
       // 3. 전문가 콘텐츠 생성
-      setLoadingStep('generate');
       const generateResponse = await fetch('/api/generate/create-content-expert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -357,7 +206,7 @@ export default function GeneratePage() {
           recommendations: params.recommendations,
           startSentence,
           endSentence,
-          placeInfo: params.placeInfo || placeInfo,
+          placeInfo: params.placeInfo,
         }),
       });
 
@@ -379,14 +228,12 @@ export default function GeneratePage() {
       setChatHistory([]);
       setRefineInput('');
       setError('');
-      setLoadingStep(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다');
     } finally {
       setLoading(false);
-      setLoadingStep(null);
     }
-  }, [images, topic, keywords, length, startSentence, endSentence, placeInfo, compressImage]);
+  }, [images, topic, keywords, length, startSentence, endSentence, compressImage]);
 
   const handleCopyToClipboard = useCallback(async () => {
     if (!result) return;
@@ -430,7 +277,6 @@ export default function GeneratePage() {
           userRequest: requestText,
           keywords: keywords,
           imageAnalysis: imageAnalysisResult,
-          placeInfo: placeInfo || undefined,
         }),
       });
 
@@ -472,44 +318,29 @@ export default function GeneratePage() {
     } finally {
       setIsRefining(false);
     }
-  }, [refineInput, result, imageAnalysisResult, keywords, placeInfo]);
-
-  const handleSearchPlace = useCallback(async () => {
-    if (!placeName.trim()) return;
-
-    setLoadingPlace(true);
-    try {
-      const response = await fetch(`/api/place/search?name=${encodeURIComponent(placeName)}`);
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || '가게 정보를 가져올 수 없습니다');
-      }
-
-      const data = await response.json();
-      setPlaceInfo(data.placeInfo);
-      console.log('가게 정보를 가져왔습니다');
-    } catch (error) {
-      console.error('가게 검색 오류:', error);
-      const errorMessage = error instanceof Error ? error.message : '가게 정보를 가져올 수 없습니다';
-      alert(errorMessage);
-      setPlaceInfo(null);
-    } finally {
-      setLoadingPlace(false);
-    }
-  }, [placeName]);
-
-  const lengthOptions = useMemo(() => [
-    { value: 'short', label: '짧은 글', desc: '1500-2000자', emoji: '📄' },
-    { value: 'medium', label: '중간 글', desc: '2000-2500자', emoji: '📑' },
-    { value: 'long', label: '긴 글', desc: '2500-3000자', emoji: '📚' },
-  ], []);
+  }, [refineInput, result, imageAnalysisResult, keywords]);
 
   // 이미지 가이드 메모이제이션 (계산 비용이 높은 연산)
   const imageGuides = useMemo(() =>
     result ? generateClientImageGuides(result.content, result.imageAnalysis) : [],
     [result]
   );
+
+  // TXT 다운로드 ([IMAGE_N] 마커 포함 - 블로그에 붙여넣을 때 이미지 위치 참고용)
+  const handleDownload = useCallback(() => {
+    if (!result) return;
+
+    triggerDownload(
+      {
+        content: result.content,
+        imageGuides,
+        wordCount: result.wordCount,
+        keywordCounts: result.keywordCounts,
+      },
+      'txt',
+      topic
+    );
+  }, [result, imageGuides, topic]);
 
   return (
     <div className="min-h-screen">
@@ -710,9 +541,13 @@ export default function GeneratePage() {
                   </>
                 )}
               </button>
-              <button className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-orange-100 to-amber-100 text-orange-800 rounded-xl hover:from-orange-200 hover:to-amber-200 smooth-transition font-semibold">
+              <button
+                onClick={handleDownload}
+                title="[IMAGE_N] 마커가 포함된 TXT 파일로 저장합니다"
+                className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-orange-100 to-amber-100 text-orange-800 rounded-xl hover:from-orange-200 hover:to-amber-200 smooth-transition font-semibold"
+              >
                 <Download className="w-5 h-5" />
-                다운로드
+                TXT 다운로드
               </button>
             </div>
 

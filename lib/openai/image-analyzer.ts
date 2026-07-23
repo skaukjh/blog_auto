@@ -1,5 +1,4 @@
 import { openai, OPENAI_MODELS } from "./client";
-import { IMAGE_ANALYSIS_PROMPT } from "./prompts";
 import { getExpertPrompt } from "@/lib/experts/prompts";
 import type { ImageAnalysisResult, CompressedImageAnalysis, ExpertType, ModelConfig } from "@/types/index";
 

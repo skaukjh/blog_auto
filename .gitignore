@@ -41,3 +41,17 @@ Thumbs.db
 .cache/
 nul
 api-blog-*.json
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# 이미지 원본 등 대용량 자산 (소스 저장소에서 관리하지 않음)
+*.zip
+
+# 네이버 자동화 디버깅용 임시 스크립트 (자격증명이 섞이기 쉬움)
+investigate-popup*
+
+# 네이버 자동화 프로젝트(B) 빌드 산출물
+/automation/.next/
+/automation/node_modules
+/automation/.env.local
+

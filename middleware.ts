@@ -6,7 +6,7 @@ const secret = new TextEncoder().encode(
 );
 
 const publicPaths = ["/login", "/api/auth/login"];
-const protectedPaths = ["/generate", "/format", "/api/generate", "/api/blog", "/api/assistant", "/api/products"];
+const protectedPaths = ["/generate", "/format", "/api/generate", "/api/blog", "/api/products"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

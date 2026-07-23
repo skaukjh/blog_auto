@@ -1,23 +1,8 @@
 // 폼 관련 타입
-export interface GenerateFormData {
-  topic: string;
-  length: 'short' | 'medium' | 'long';
-  keywords: KeywordItem[];
-  images: File[];
-  startSentence?: string;
-  endSentence?: string;
-}
 
 export interface KeywordItem {
   text: string;
   count: number;
-}
-
-export interface LengthOption {
-  value: 'short' | 'medium' | 'long';
-  label: string;
-  description: string;
-  estimatedWords: number;
 }
 
 // 이미지 분석 관련 타입
@@ -48,12 +33,6 @@ export interface ImageAnalysisResult {
 }
 
 // 블로그 스타일 관련 타입
-export interface BlogAnalysisResult {
-  style: BlogStyle;
-  analyzedAt: string;
-  blogs: BlogPost[];
-  cacheKey: string;
-}
 
 export interface BlogStyle {
   tone: string;
@@ -103,14 +82,6 @@ export interface ContentSegment {
 }
 
 // 뷰 모드 관련 타입
-export type ViewMode = 'preview' | 'edit';
-
-export interface ContentDisplayState {
-  content: string;
-  imageGuides: ImageGuide[];
-  viewMode: ViewMode;
-  selectedImageIndex?: number;
-}
 
 // API 요청/응답 타입
 export interface LoginRequest {
@@ -123,104 +94,6 @@ export interface LoginResponse {
   token?: string;
 }
 
-export interface AssistantCreateRequest {
-  model: string;
-  instructions: string;
-  tools?: unknown[];
-}
-
-export interface AssistantCreateResponse {
-  id: string;
-  object: string;
-  created_at: number;
-  model: string;
-  instructions: string;
-}
-
-export interface AssistantUpdateRequest {
-  id: string;
-  instructions: string;
-}
-
-export interface AssistantUpdateResponse {
-  id: string;
-  object: string;
-  created_at: number;
-  model: string;
-  instructions: string;
-}
-
-export interface AssistantGetResponse {
-  id: string;
-  object: string;
-  created_at: number;
-  model: string;
-  instructions: string;
-}
-
-export interface FetchLatestBlogResponse {
-  success: boolean;
-  blogs: BlogPost[];
-  message?: string;
-  error?: string;
-}
-
-export interface AnalyzeStyleRequest {
-  blogs: BlogPost[];
-}
-
-export interface AnalyzeStyleResponse {
-  success: boolean;
-  style: BlogStyle;
-  analyzedAt: string;
-  message?: string;
-  error?: string;
-}
-
-export interface AnalyzeImagesRequest {
-  images: string[];
-  topic: string;
-  context?: string;
-}
-
-export interface AnalyzeImagesResponse {
-  success: boolean;
-  analysis: ImageAnalysisResult;
-  message?: string;
-  error?: string;
-}
-
-export interface CreateContentRequest {
-  topic: string;
-  length: 'short' | 'medium' | 'long';
-  keywords: KeywordItem[];
-  imageAnalysis: ImageAnalysisResult;
-  startSentence?: string;
-  endSentence?: string;
-  placeInfo?: PlaceInfo;
-}
-
-export interface CreateContentResponse {
-  success: boolean;
-  content: GeneratedContentWithImages;
-  cost?: {
-    usd: number;
-    krw: number;
-    breakdown?: {
-      imageAnalysis: { usd: number; krw: number };
-      contentGeneration: { usd: number; krw: number };
-    };
-  };
-  message?: string;
-  error?: string;
-}
-
-export interface ErrorResponse {
-  success: false;
-  error: string;
-  details?: unknown;
-}
-
 // 세션 관련 타입
 export interface SessionPayload {
   iat: number;
@@ -229,24 +102,8 @@ export interface SessionPayload {
 }
 
 // 블로그 스타일 캐시 타입
-export interface BlogStyleCache {
-  style: BlogStyle;
-  blogs: BlogPost[];
-  analyzedAt: string;
-  cacheKey: string;
-}
 
 // 다운로드 관련 타입
-export interface DownloadFormat {
-  format: 'txt' | 'docx' | 'html';
-  includeMarkers: boolean;
-}
-
-export interface DownloadOptions {
-  filename: string;
-  format: DownloadFormat['format'];
-  includeMarkers: boolean;
-}
 
 // 채팅 수정 관련 타입
 export interface ChatMessage {
@@ -296,98 +153,6 @@ export interface PlaceInfo {
   nearbyTransit?: string;
   reviews?: PlaceReview[];
   menus?: MenuInfo[];
-}
-
-// 네이버 블로그 이웃 자동 좋아요 관련 타입
-export interface NeighborCredentials {
-  blogId: string;
-  blogPassword: string;
-  encryptedAt: string;
-}
-
-export interface NeighborLoginRequest {
-  blogId: string;
-  blogPassword: string;
-  decryptPassword: string;
-}
-
-export interface NeighborLoginResponse {
-  success: boolean;
-  message: string;
-  sessionId?: string;
-  error?: string;
-}
-
-export interface NeighborInfo {
-  blogName: string;
-  blogUrl: string;
-  nickname: string;
-}
-
-export interface BlogPostWithLike {
-  title: string;
-  url: string;
-  date: string;
-  hasLike: boolean;
-  blogName?: string;
-  blogUrl?: string;
-}
-
-export interface NeighborLikeRequest {
-  blogId: string;
-  blogPassword: string;
-  decryptPassword: string;
-  daysLimit?: number;
-  maxNeighbors?: number;
-}
-
-export interface NeighborLikeResponse {
-  success: boolean;
-  processed: number;
-  liked: number;
-  errors: string[];
-  message?: string;
-}
-
-// 네이버 블로그 이웃 댓글+좋아요 관련 타입
-export interface CommentGenerationRequest {
-  postContent: string;
-  postTitle: string;
-}
-
-export interface CommentGenerationResponse {
-  success: boolean;
-  comment: string;
-  error?: string;
-}
-
-export interface NeighborCommentRequest {
-  blogId: string;
-  blogPassword: string;
-  maxPosts?: number;
-  minInterval?: number;
-  keepLikingAfter?: boolean;
-}
-
-export interface NeighborCommentDetail {
-  title: string;
-  url: string;
-  liked: boolean;
-  commented: boolean;
-  comment?: string;
-  reason?: string;
-}
-
-export interface NeighborCommentResult {
-  success: boolean;
-  totalProcessed: number;
-  totalCommented: number;
-  totalLiked: number;
-  totalSkipped: number;
-  startedAt: string;
-  completedAt: string;
-  details: NeighborCommentDetail[];
-  error?: string;
 }
 
 // 제품 검색 관련 타입 (Phase 24: 제품 후기 전문가)
@@ -444,12 +209,6 @@ export interface WebSearchResult {
   source: 'naver' | 'google';
 }
 
-export interface WebSearchRequest {
-  query: string;
-  searchEngine: 'naver' | 'google'; // 선택 가능
-  limit?: number; // 기본 5
-}
-
 export interface WebSearchResponse {
   success: boolean;
   results: WebSearchResult[];
@@ -485,13 +244,6 @@ export interface RecommendationResponse {
 }
 
 // 전문가 기반 이미지 분석
-export interface ExpertAnalyzeImagesRequest {
-  images: string[]; // Base64 encoded images
-  topic: string;
-  expertType: ExpertType;
-  modelConfig: ModelConfig;
-  context?: string;
-}
 
 export interface ExpertAnalyzeImagesResponse {
   success: boolean;
@@ -502,19 +254,6 @@ export interface ExpertAnalyzeImagesResponse {
 }
 
 // 전문가 기반 콘텐츠 생성
-export interface ExpertCreateContentRequest {
-  topic: string;
-  length: 'short' | 'medium' | 'long';
-  keywords: KeywordItem[];
-  imageAnalysis: ImageAnalysisResult;
-  expertType: ExpertType;
-  modelConfig: ModelConfig;
-  webSearchResults?: WebSearchResult[]; // 웹 검색 결과
-  recommendations?: RecommendationItem[]; // 추천 아이템
-  startSentence?: string;
-  endSentence?: string;
-  placeInfo?: PlaceInfo;
-}
 
 export interface ExpertCreateContentResponse {
   success: boolean;

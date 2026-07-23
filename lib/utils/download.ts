@@ -193,11 +193,27 @@ function escapeHtml(text: string): string {
 }
 
 /**
+ * 파일명에 사용할 수 없는 문자를 제거합니다
+ * (Windows 금지 문자 \ / : * ? " < > | 및 제어문자, 앞뒤 공백/마침표)
+ */
+function sanitizeFilename(name: string): string {
+  return name
+    .replace(/[\\/:*?"<>|]/g, "")
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x1f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^\.+|\.+$/g, "")
+    .slice(0, 80);
+}
+
+/**
  * 파일명 생성 (날짜 포함)
  */
 export function generateFilename(format: "txt" | "docx" | "html", title?: string): string {
   const timestamp = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-  const baseFilename = title ? `${title}_${timestamp}` : `blog_${timestamp}`;
+  const safeTitle = title ? sanitizeFilename(title) : "";
+  const baseFilename = safeTitle ? `${safeTitle}_${timestamp}` : `blog_${timestamp}`;
 
   const extensions: Record<string, string> = {
     txt: "txt",
