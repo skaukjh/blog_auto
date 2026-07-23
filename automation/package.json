@@ -1,0 +1,32 @@
+{
+  "name": "blog-automation",
+  "version": "1.0.0",
+  "private": true,
+  "description": "네이버 블로그 이웃 자동화 (로컬 전용) - 좋아요 / 댓글 / 서로이웃 추가",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "test:neighbor": "tsx scripts/test-neighbor.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.95.3",
+    "lucide-react": "^0.563.0",
+    "next": "^15.5.12",
+    "openai": "^4.104.0",
+    "playwright": "^1.58.2",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.1",
+    "@types/react": "^19.2.13",
+    "@types/react-dom": "^19.2.3",
+    "autoprefixer": "^10.4.24",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.19",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

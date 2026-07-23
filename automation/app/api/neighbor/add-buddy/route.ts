@@ -330,45 +330,57 @@ async function addBuddiesWithPlaywright(
           const afterNextUrl = buddyPopupPage.url();
           console.log(`[서로이웃] 전환 후 URL: ${afterNextUrl}`);
 
-          // 9단계: 인사말 입력 (팝업이 살아있을 때만 시도)
-          if (!buddyPopupPage.isClosed()) {
-            console.log('[서로이웃] 인사말 입력 중...');
-            try {
-              // #message 존재 여부를 JS로 빠르게 확인
-              const hasMessage = await buddyPopupPage.evaluate(
-                () => !!document.querySelector('#message')
-              ).catch(() => false);
+          // 9단계: 팝업 상태 확인 - 첫번째 버튼 후 팝업이 닫혔으면 신청 실패
+          if (buddyPopupPage.isClosed()) {
+            console.log('[서로이웃] ⚠️ 첫번째 다음 버튼 후 팝업이 자동 닫힘 - 신청 미완료로 처리');
+            totalFailed++;
+            details.push({
+              index: totalProcessed,
+              blogId: actualBlogId,
+              added: false,
+              reason: '팝업 자동 닫힘 (신청 미완료)',
+            });
+            buddyPopupPage = null;
+            await page.waitForTimeout(1000);
+            continue;
+          }
 
-              if (hasMessage) {
-                const messageInput = buddyPopupPage.locator('#message').first();
-                await messageInput.fill(greetingMessage).catch(() => {});
-                await page.waitForTimeout(500);
-                console.log('[서로이웃] 인사말 입력 완료');
-              } else {
-                console.log('[서로이웃] #message 요소 없음 - 인사말 입력 생략');
-              }
-            } catch (msgErr) {
-              console.log('[서로이웃] 인사말 입력 실패, 계속 진행:', msgErr);
+          // 인사말 입력 (팝업이 살아있는 경우만)
+          console.log('[서로이웃] 인사말 입력 중...');
+          try {
+            const hasMessage = await buddyPopupPage.evaluate(
+              () => !!document.querySelector('#message')
+            ).catch(() => false);
+
+            if (hasMessage) {
+              const messageInput = buddyPopupPage.locator('#message').first();
+              await messageInput.fill(greetingMessage).catch(() => {});
+              await page.waitForTimeout(500);
+              console.log('[서로이웃] 인사말 입력 완료');
+            } else {
+              console.log('[서로이웃] #message 요소 없음 - 인사말 입력 생략');
             }
+          } catch (msgErr) {
+            console.log('[서로이웃] 인사말 입력 실패, 계속 진행:', msgErr);
+          }
+
+          // 10단계: 두 번째 다음 버튼 클릭 (신청 제출)
+          console.log('[서로이웃] 두번째 다음 버튼 클릭...');
+          const nextBtn2 = buddyPopupPage.locator('a.button_next._addBothBuddy').first();
+          await nextBtn2.click().catch(() => {});
+          await page.waitForTimeout(2000);
+
+          // 11단계: 완료 처리 - 팝업 자동 닫힘(성공) 또는 완료 화면 닫기
+          if (buddyPopupPage.isClosed()) {
+            // 두번째 버튼 클릭 후 팝업이 자동으로 닫힘 = 신청 완료 후 window.close() 호출됨
+            console.log('[서로이웃] 신청 완료 후 팝업 자동 닫힘 (정상)');
           } else {
-            console.log('[서로이웃] 팝업이 이미 닫혔습니다 - 인사말 입력 생략');
-          }
-
-          // 10단계: 두 번째 다음 버튼 클릭 (팝업이 살아있을 때만)
-          if (!buddyPopupPage.isClosed()) {
-            console.log('[서로이웃] 두번째 다음 버튼 클릭...');
-            const nextBtn2 = buddyPopupPage.locator('a.button_next._addBothBuddy').first();
-            await nextBtn2.click().catch(() => {});
-            await page.waitForTimeout(2000);
-          }
-
-          // 11단계: 닫기 버튼 클릭 (팝업이 살아있을 때만)
-          if (!buddyPopupPage.isClosed()) {
+            // 완료 화면이 표시된 경우 닫기 버튼 클릭
             console.log('[서로이웃] 닫기 버튼 클릭...');
             const closeBtn = buddyPopupPage.locator('#content > div > div.area_button > a').first();
             await closeBtn.click().catch(() => {});
+            await buddyPopupPage.close().catch(() => {});
           }
-          await buddyPopupPage.close().catch(() => {});
 
           buddyPopupPage = null;
           // 닫기 후 대기는 팝업이 아닌 메인 페이지에서 수행

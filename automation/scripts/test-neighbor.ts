@@ -1,4 +1,4 @@
-import { processNeighborAutoLike } from './lib/naver/blog-automation';
+import { processNeighborAutoLike } from '@/lib/naver/blog-automation';
 
 /**
  * 테스트 스크립트: 네이버 블로그 이웃 자동 좋아요
@@ -9,9 +9,14 @@ async function testNeighborAutoLike() {
   console.log('=====================================\n');
 
   try {
-    // 테스트 계정
-    const blogId = 'skaukjh';
-    const blogPassword = 'wogns0513@';
+    // 테스트 계정 (환경변수로만 주입, 하드코딩 금지)
+    const blogId = process.env.NAVER_TEST_ID;
+    const blogPassword = process.env.NAVER_TEST_PW;
+
+    if (!blogId || !blogPassword) {
+      throw new Error('환경변수 NAVER_TEST_ID / NAVER_TEST_PW 를 설정하세요.');
+    }
+
     const daysLimit = 7;
     const maxNeighbors = 3; // 테스트용으로 3명만
 

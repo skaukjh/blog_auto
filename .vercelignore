@@ -1,0 +1,5 @@
+# 네이버 자동화(B)는 로컬 전용이므로 Vercel 배포에서 제외합니다
+automation/
+tests/
+test-results/
+.playwright-mcp/

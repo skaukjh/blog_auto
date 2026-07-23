@@ -1,0 +1,6 @@
+/node_modules
+/.next/
+.env.local
+
+# 디버깅용 임시 스크립트 (자격증명이 섞이기 쉬움)
+scripts/investigate-popup*

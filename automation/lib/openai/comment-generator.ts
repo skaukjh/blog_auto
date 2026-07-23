@@ -1,6 +1,6 @@
 import { openai, DEFAULT_MODEL } from './client';
 import blogStyleCache from '@/lib/utils/blog-style-memory-cache';
-import { getBlogStyleFromSupabase } from '@/lib/utils/style-storage';
+import { getBlogStyleFromFile } from '@/lib/utils/style-storage';
 
 /**
  * 블로그 스타일에 맞춰 자연스러운 댓글을 생성합니다
@@ -12,12 +12,12 @@ export async function generateComment(
   postContent: string,
   postTitle: string
 ): Promise<string> {
-  // 1. 블로그 스타일 로드 (메모리 캐시 → Supabase)
+  // 1. 블로그 스타일 로드 (메모리 캐시 → data/blog-style.txt)
   let style = blogStyleCache.get();
   if (!style) {
-    const supabaseData = await getBlogStyleFromSupabase();
-    if (supabaseData) {
-      style = supabaseData.style;
+    const fileData = getBlogStyleFromFile();
+    if (fileData) {
+      style = fileData.style;
       blogStyleCache.set(style);
     }
   }

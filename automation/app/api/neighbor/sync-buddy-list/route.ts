@@ -291,13 +291,26 @@ export async function POST(request: NextRequest): Promise<NextResponse<SyncBuddy
     const existing = (await getNeighborTargetList()) || [];
     console.log(`[동기화] 기존 목록 ${existing.length}명`);
 
-    // 새로 추가할 이웃만 필터링
-    const addedNicknames = fetchedIds.filter((id) => !existing.includes(id));
-    const mergedList = [...new Set([...existing, ...fetchedIds])];
+    // 대소문자 구분 없이 비교하기 위해 소문자 정규화
+    const existingSet = new Set(existing.map((id) => id.toLowerCase().trim()));
+    const fetchedNormalized = fetchedIds.map((id) => id.toLowerCase().trim());
+
+    // 새로 추가할 이웃만 필터링 (대소문자 무시 비교)
+    const addedNicknames = fetchedIds.filter(
+      (id) => !existingSet.has(id.toLowerCase().trim())
+    );
+
+    // 병합 시 기존 목록 유지 + 신규만 추가 (중복 제거, 대소문자 무시)
+    const existingKept = existing;
+    const newOnly = fetchedIds.filter(
+      (id) => !existingSet.has(id.toLowerCase().trim())
+    );
+    const mergedList = [...new Set([...existingKept, ...newOnly])];
 
     console.log(`[동기화] 새로 추가: ${addedNicknames.length}명`);
+    console.log(`[동기화] 이미 존재: ${existing.length - (existing.length - fetchedNormalized.filter(id => existingSet.has(id)).length)}명`);
 
-    // Supabase에 저장
+    // Supabase에 저장 (신규 이웃이 있을 때만)
     if (addedNicknames.length > 0) {
       const saved = await saveNeighborTargetList(mergedList);
       if (!saved) {
@@ -305,13 +318,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<SyncBuddy
       }
     }
 
+    const alreadyCount = fetchedNormalized.filter((id) => existingSet.has(id)).length;
     console.log('========== 동기화 완료 ==========\n');
 
     return NextResponse.json({
       success: true,
       totalFetched: fetchedIds.length,
       totalAdded: addedNicknames.length,
-      totalAlready: existing.filter((id) => fetchedIds.includes(id)).length,
+      totalAlready: alreadyCount,
       addedNicknames,
       allNicknames: mergedList,
     });
