@@ -9,38 +9,42 @@ interface ModelSelectorProps {
   disabled?: boolean;
 }
 
+// ⚠️ 실존하는 모델 ID만 사용합니다. lib/openai/client.ts 의 OPENAI_MODELS 와 일치해야 합니다.
 const PRESET_CONFIGS = {
   quality: {
     label: '🏆 최고 품질 (추천)',
-    description: '최고 성능의 모델 조합',
+    description: 'GPT-5.6 Sol - 이미지 분석과 글쓰기 모두 최고 성능',
     config: {
-      imageAnalysisModel: 'gpt-5.2',
-      webSearchModel: 'gpt-4o-mini',
-      contentGenerationModel: 'gpt-5.2',
+      imageAnalysisModel: 'gpt-5.6-sol',
+      webSearchModel: 'gpt-5.6-terra',
+      contentGenerationModel: 'gpt-5.6-sol',
       creativity: 7,
     },
   },
   balanced: {
-    label: '⚖️ 균형형 (기본)',
-    description: '품질과 비용의 최적 조합',
+    label: '⚖️ 균형형',
+    description: 'GPT-5.6 Terra - 성능과 비용의 균형',
     config: {
-      imageAnalysisModel: 'gpt-4o',
-      webSearchModel: 'gpt-4o-mini',
-      contentGenerationModel: 'gpt-4o',
+      imageAnalysisModel: 'gpt-5.6-terra',
+      webSearchModel: 'gpt-5.6-luna',
+      contentGenerationModel: 'gpt-5.6-terra',
       creativity: 7,
     },
   },
   economical: {
     label: '💰 절약형',
-    description: '저비용 고효율',
+    description: 'GPT-5.6 Luna - 비용 우선',
     config: {
-      imageAnalysisModel: 'gpt-4o-mini',
-      webSearchModel: 'gpt-4o-mini',
-      contentGenerationModel: 'gpt-4o-mini',
+      imageAnalysisModel: 'gpt-5.6-luna',
+      webSearchModel: 'gpt-5.6-luna',
+      contentGenerationModel: 'gpt-5.6-luna',
       creativity: 6,
     },
   },
 };
+
+/** 고급 설정 입력 도움말에 노출할 실제 모델 목록 */
+const AVAILABLE_MODELS = 'gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-4o, gpt-4o-mini';
 
 export function ModelSelector({
   modelConfig,
@@ -100,12 +104,12 @@ export function ModelSelector({
                   imageAnalysisModel: value,
                 });
               }}
-              placeholder="예: gpt-4o, claude-opus-4-6, gemini-3-pro"
+              placeholder={`예: ${AVAILABLE_MODELS}`}
               disabled={disabled}
               className="w-full px-3 py-2 border border-gray-300 rounded text-sm disabled:opacity-50"
             />
             <p className="text-xs text-gray-500 mt-1">
-              예: gpt-4o, gpt-5.2, claude-opus-4-6, gemini-3-pro
+              {`사용 가능: ${AVAILABLE_MODELS}`}
             </p>
           </div>
 
@@ -123,7 +127,7 @@ export function ModelSelector({
                   webSearchModel: e.target.value,
                 })
               }
-              placeholder="예: gpt-4o-mini, claude-haiku-4-5"
+              placeholder={`예: ${AVAILABLE_MODELS}`}
               disabled={disabled}
               className="w-full px-3 py-2 border border-gray-300 rounded text-sm disabled:opacity-50"
             />
@@ -146,7 +150,7 @@ export function ModelSelector({
                   contentGenerationModel: e.target.value,
                 })
               }
-              placeholder="예: gpt-4o, gpt-5.2, claude-opus-4-6"
+              placeholder={`예: ${AVAILABLE_MODELS}`}
               disabled={disabled}
               className="w-full px-3 py-2 border border-gray-300 rounded text-sm disabled:opacity-50"
             />

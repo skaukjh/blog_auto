@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { UTILITY_MODEL } from '@/lib/openai/client';
 import { WebSearchResult } from '@/types';
 
 /**
@@ -24,7 +25,7 @@ interface FactExtractionResult {
 export async function extractFacts(
   query: string,
   searchResults: WebSearchResult[],
-  model: string = 'gpt-4o-mini'
+  model: string = UTILITY_MODEL
 ): Promise<FactExtractionResult> {
   try {
     const searchSummary = searchResults
@@ -59,7 +60,7 @@ Output Format:
 
     const response = await openai.chat.completions.create({
       model: model,
-      max_tokens: 500,
+      max_completion_tokens: 4000,
       messages: [
         {
           role: 'user',

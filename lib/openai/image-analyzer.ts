@@ -1,4 +1,4 @@
-import { openai, OPENAI_MODELS } from "./client";
+import { openai, IMAGE_ANALYSIS_MODEL, resolveModel, buildChatParams } from "./client";
 import { getExpertPrompt } from "@/lib/experts/prompts";
 import type { ImageAnalysisResult, CompressedImageAnalysis, ExpertType, ModelConfig } from "@/types/index";
 
@@ -10,7 +10,7 @@ export async function analyzeImagesExpert(
 ): Promise<ImageAnalysisResult> {
   try {
     const expertPrompt = getExpertPrompt(expertType);
-    const model = modelConfig.imageAnalysisModel as keyof typeof OPENAI_MODELS;
+    const model = modelConfig.imageAnalysisModel;
 
     // 배치 분석 (전문가 프롬프트 사용)
     const imageAnalyses = await analyzeImageBatchExpert(
@@ -62,7 +62,7 @@ export async function analyzeImagesExpert(
 async function analyzeImageBatchExpert(
   images: string[],
   systemPrompt: string,
-  model: keyof typeof OPENAI_MODELS,
+  model: string,
   _startIndex: number = 1,
   batchSize: number = 5
 ): Promise<CompressedImageAnalysis[]> {
@@ -84,7 +84,7 @@ async function analyzeImageBatchExpert(
 async function analyzeImageBatchInternalExpert(
   images: string[],
   systemPrompt: string,
-  model: keyof typeof OPENAI_MODELS,
+  model: string,
   startIndex: number = 1
 ): Promise<CompressedImageAnalysis[]> {
   try {
@@ -122,24 +122,25 @@ Return ONLY this JSON structure:
       })),
     ];
 
-    const modelKey = (model || 'GPT_4O') as keyof typeof OPENAI_MODELS;
-    const modelName = OPENAI_MODELS[modelKey] || 'gpt-4o';
+    const modelName = resolveModel(model, IMAGE_ANALYSIS_MODEL);
 
-    const response = await openai.chat.completions.create({
-      model: modelName,
-      messages: [
-        {
-          role: "system",
-          content: systemPrompt,
-        },
-        {
-          role: "user",
-          content: messageContent as any,
-        },
-      ],
-      temperature: 0.2,
-      max_tokens: 2000,
-    });
+    const response = await openai.chat.completions.create(
+      buildChatParams({
+        model: modelName,
+        messages: [
+          {
+            role: "system",
+            content: systemPrompt,
+          },
+          {
+            role: "user",
+            content: messageContent as any,
+          },
+        ],
+        temperature: 0.2,
+        maxTokens: 8000,
+      })
+    );
 
     let content = response.choices[0]?.message?.content || "";
 
@@ -193,7 +194,7 @@ async function analyzeOverallContextExpert(
   images: string[],
   topic: string,
   systemPrompt: string,
-  model: keyof typeof OPENAI_MODELS
+  model: string
 ): Promise<{ theme: string; style: string; suggestions: string[] }> {
   try {
     const messageContent = [
@@ -210,24 +211,25 @@ async function analyzeOverallContextExpert(
       })),
     ];
 
-    const modelKey = (model || 'GPT_4O') as keyof typeof OPENAI_MODELS;
-    const modelName = OPENAI_MODELS[modelKey] || 'gpt-4o';
+    const modelName = resolveModel(model, IMAGE_ANALYSIS_MODEL);
 
-    const response = await openai.chat.completions.create({
-      model: modelName,
-      messages: [
-        {
-          role: "system",
-          content: systemPrompt,
-        },
-        {
-          role: "user",
-          content: messageContent as any,
-        },
-      ],
-      temperature: 0.3,
-      max_tokens: 500,
-    });
+    const response = await openai.chat.completions.create(
+      buildChatParams({
+        model: modelName,
+        messages: [
+          {
+            role: "system",
+            content: systemPrompt,
+          },
+          {
+            role: "user",
+            content: messageContent as any,
+          },
+        ],
+        temperature: 0.3,
+        maxTokens: 4000,
+      })
+    );
 
     const content = response.choices[0]?.message?.content;
 

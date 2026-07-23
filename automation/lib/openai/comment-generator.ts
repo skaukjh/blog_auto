@@ -1,4 +1,4 @@
-import { openai, DEFAULT_MODEL } from './client';
+import { openai, DEFAULT_MODEL, buildChatParams } from './client';
 import blogStyleCache from '@/lib/utils/blog-style-memory-cache';
 import { getBlogStyleFromFile } from '@/lib/utils/style-storage';
 
@@ -70,15 +70,17 @@ Requirements:
 
   // 4. OpenAI API 호출
   try {
-    const response = await openai.chat.completions.create({
-      model: DEFAULT_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.8, // 자연스러움 향상
-      max_tokens: 150,
-    });
+    const response = await openai.chat.completions.create(
+      buildChatParams({
+        model: DEFAULT_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.8, // 자연스러움 향상 (레거시 모델에서만 적용)
+        maxTokens: 2000, // 추론 토큰 포함
+      })
+    );
 
     const comment = response.choices[0]?.message?.content?.trim() || '';
 

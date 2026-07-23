@@ -1,4 +1,4 @@
-import { openai, DEFAULT_MODEL } from "./client";
+import { openai, DEFAULT_MODEL, buildChatParams } from "./client";
 import { BLOG_STYLE_ANALYSIS_PROMPT } from "./prompts";
 import type { BlogPost, BlogStyle } from "@/types/index";
 
@@ -18,21 +18,23 @@ export async function analyzeBlogStyle(posts: BlogPost[]): Promise<BlogStyle> {
       })
       .join("\n\n---\n\n");
 
-    const response = await openai.chat.completions.create({
-      model: DEFAULT_MODEL,
-      messages: [
-        {
-          role: "system",
-          content: BLOG_STYLE_ANALYSIS_PROMPT,
-        },
-        {
-          role: "user",
-          content: postsContent,
-        },
-      ],
-      temperature: 0.3,
-      max_tokens: 1000,
-    });
+    const response = await openai.chat.completions.create(
+      buildChatParams({
+        model: DEFAULT_MODEL,
+        messages: [
+          {
+            role: "system",
+            content: BLOG_STYLE_ANALYSIS_PROMPT,
+          },
+          {
+            role: "user",
+            content: postsContent,
+          },
+        ],
+        temperature: 0.3,
+        maxTokens: 4000,
+      })
+    );
 
     const content = response.choices[0]?.message?.content;
 
@@ -152,21 +154,23 @@ ABSOLUTE RULES - FOLLOW STRICTLY:
 
 Output: Plain text, numbered sections only. Start with SENTENCE ENDING PATTERN section.`;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content: "You are an expert writing style analyzer. Extract detailed, accurate, and actionable style guides based on sample content. Focus on patterns, tone, structure, and conventions. Output should be practical for guiding AI-generated content.",
-        },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      temperature: 0.4,
-      max_tokens: 1500,
-    });
+    const response = await openai.chat.completions.create(
+      buildChatParams({
+        model: DEFAULT_MODEL,
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert writing style analyzer. Extract detailed, accurate, and actionable style guides based on sample content. Focus on patterns, tone, structure, and conventions. Output should be practical for guiding AI-generated content.",
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        temperature: 0.4,
+        maxTokens: 6000,
+      })
+    );
 
     const content = response.choices[0]?.message?.content;
 

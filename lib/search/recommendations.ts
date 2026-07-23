@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { UTILITY_MODEL } from '@/lib/openai/client';
 import { ExpertType, RecommendationItem, RecommendationRequest } from '@/types';
 import { webSearch } from './web-search';
 import { RECOMMENDATION_QUERY_TEMPLATES } from '@/lib/experts/definitions';
@@ -211,8 +212,8 @@ JSON 형식:
     }
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      max_tokens: 1000,
+      model: UTILITY_MODEL,
+      max_completion_tokens: 6000,
       response_format: { type: 'json_object' },
       messages: [
         {

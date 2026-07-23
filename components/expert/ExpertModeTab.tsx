@@ -59,9 +59,9 @@ export function ExpertModeTab({
 }: ExpertModeTabProps) {
   const [selectedExpert, setSelectedExpert] = useState<ExpertType | null>(null);
   const [modelConfig, setModelConfig] = useState<ModelConfig>({
-    imageAnalysisModel: 'gpt-4o',
-    webSearchModel: 'gpt-4o-mini',
-    contentGenerationModel: 'gpt-4o',
+    imageAnalysisModel: 'gpt-5.6-sol',
+    webSearchModel: 'gpt-5.6-terra',
+    contentGenerationModel: 'gpt-5.6-sol',
     creativity: 7,
   });
 

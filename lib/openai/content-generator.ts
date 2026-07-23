@@ -1,4 +1,11 @@
-import { openai, DEFAULT_MODEL, OPENAI_MODELS } from "./client";
+import {
+  openai,
+  DEFAULT_MODEL,
+  CONTENT_MODEL,
+  resolveModel,
+  buildChatParams,
+  supportsTemperature,
+} from "./client";
 import { CONTENT_GENERATOR_SYSTEM_PROMPT } from "./prompts";
 import { getExpertPrompt } from "@/lib/experts/prompts";
 import { parseMarkers } from "@/lib/utils/marker-parser";
@@ -158,21 +165,23 @@ CRITICAL RULES:
 
 Output ONLY the modified blog post content. No explanations.`;
 
-    const response = await openai.chat.completions.create({
-      model: DEFAULT_MODEL,
-      messages: [
-        {
-          role: "system",
-          content: CONTENT_GENERATOR_SYSTEM_PROMPT,
-        },
-        {
-          role: "user",
-          content: userPrompt,
-        },
-      ],
-      temperature: 0.7,
-      max_tokens: 3000,
-    });
+    const response = await openai.chat.completions.create(
+      buildChatParams({
+        model: DEFAULT_MODEL,
+        messages: [
+          {
+            role: "system",
+            content: CONTENT_GENERATOR_SYSTEM_PROMPT,
+          },
+          {
+            role: "user",
+            content: userPrompt,
+          },
+        ],
+        temperature: 0.7,
+        maxTokens: 12000,
+      })
+    );
 
     let refinedContent = response.choices[0]?.message?.content || "";
 
@@ -231,7 +240,21 @@ export async function generateBlogContentExpert(
 ): Promise<GeneratedContentWithImages> {
   try {
     const expertPrompt = getExpertPrompt(expertType);
+    const modelName = resolveModel(modelConfig.contentGenerationModel, CONTENT_MODEL);
     const temperature = 0.3 + (modelConfig.creativity - 1) * 0.1; // 1-10 → 0.3-1.2
+
+    // GPT-5 이상 계열은 temperature를 받지 않으므로, 창의성 수준을
+    // 프롬프트 지시문으로 전달해 슬라이더가 계속 의미를 갖도록 합니다.
+    const creativityDirective = supportsTemperature(modelName)
+      ? ""
+      : `\n\n⚠️ CREATIVITY LEVEL: ${modelConfig.creativity}/10
+${
+  modelConfig.creativity <= 3
+    ? "Stay close to the source material. Use plain, predictable phrasing and avoid embellishment."
+    : modelConfig.creativity <= 7
+      ? "Balance faithfulness with lively expression. Vary sentence rhythm naturally."
+      : "Be vivid and expressive. Use bold imagery and varied sentence structure, but never invent facts that are not visible in the images or provided data."
+}`;
 
     // 기본 설정
     const charCount = {
@@ -375,25 +398,25 @@ PRIORITY 5 - QUALITY & ENGAGEMENT:
 - Include sensory details and practical tips
 - Make it engaging and valuable for readers`;
 
-    // 모델 선택
-    const modelKey = (modelConfig.contentGenerationModel || 'gpt-4o') as keyof typeof OPENAI_MODELS;
-    const modelName = OPENAI_MODELS[modelKey] || 'gpt-4o';
+    userPrompt += creativityDirective;
 
-    const response = await openai.chat.completions.create({
-      model: modelName,
-      messages: [
-        {
-          role: "system",
-          content: expertPrompt.contentGenerationSystemPrompt,
-        },
-        {
-          role: "user",
-          content: userPrompt,
-        },
-      ],
-      temperature: Math.min(temperature, 2.0), // API 최대값: 2.0
-      max_tokens: 3000,
-    });
+    const response = await openai.chat.completions.create(
+      buildChatParams({
+        model: modelName,
+        messages: [
+          {
+            role: "system",
+            content: expertPrompt.contentGenerationSystemPrompt,
+          },
+          {
+            role: "user",
+            content: userPrompt,
+          },
+        ],
+        temperature: Math.min(temperature, 2.0), // 레거시 모델에서만 적용
+        maxTokens: 12000,
+      })
+    );
 
     let content = response.choices[0]?.message?.content || "";
 
