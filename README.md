@@ -64,7 +64,7 @@ npm start
 ```
 OPENAI_API_KEY=sk-proj-...
 OPENAI_ASSISTANT_ID=asst_...  # 프로그램이 자동 생성
-AUTH_PASSWORD=wogns0513@
+AUTH_PASSWORD=<your-password>
 SESSION_SECRET=<32자의 무작위 문자열>
 BLOG_URL=https://blog.naver.com/ssyeonee27
 NEXT_PUBLIC_APP_URL=http://localhost:3000
@@ -73,7 +73,7 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 ### 사용 방법
 
 1. **로그인** (`/login`)
-   - 비밀번호 입력 (기본값: `wogns0513@`)
+   - 비밀번호 입력 (기본값: `<your-password>`)
 
 2. **포맷 관리** (`/format`)
    - 블로그 스타일 자동 분석

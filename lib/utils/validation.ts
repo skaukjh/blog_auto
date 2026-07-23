@@ -92,6 +92,13 @@ export const validateUrl = (url: string): boolean => {
 
 // 비밀번호 검증
 export const validatePassword = (password: string): boolean => {
-  const correctPassword = process.env.AUTH_PASSWORD || "wogns0513@";
+  const correctPassword = process.env.AUTH_PASSWORD;
+
+  // 환경변수 미설정 시 폴백 비밀번호로 통과시키지 않고 무조건 거부합니다
+  if (!correctPassword) {
+    console.error("❌ AUTH_PASSWORD 환경변수가 설정되지 않았습니다");
+    return false;
+  }
+
   return password === correctPassword;
 };

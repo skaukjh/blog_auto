@@ -20,7 +20,7 @@
 ### 환경 변수 검증
 ✅ **모든 필수 환경 변수 설정 완료**
 - `OPENAI_API_KEY`: ✅ 설정됨
-- `AUTH_PASSWORD`: ✅ wogns0513@
+- `AUTH_PASSWORD`: ✅ <your-password>
 - `SESSION_SECRET`: ✅ 설정됨
 - `NEXT_PUBLIC_SUPABASE_URL`: ✅ 설정됨
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: ✅ 설정됨

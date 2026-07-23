@@ -187,7 +187,7 @@ Expert-Driven Generation
 ## 🔐 보안
 
 ### 인증
-- 비밀번호 기반 로그인 (`wogns0513@`)
+- 비밀번호 기반 로그인 (`<your-password>`)
 - JWT 토큰 (24시간 유효)
 - HttpOnly 쿠키
 
@@ -303,7 +303,7 @@ npm run check-all  # TypeScript + Lint + Build
 ### 환경 변수
 ```bash
 OPENAI_API_KEY=sk-proj-...
-AUTH_PASSWORD=wogns0513@
+AUTH_PASSWORD=<your-password>
 SESSION_SECRET=<random-32-char>
 NAVER_CLIENT_ID=...
 NAVER_CLIENT_SECRET=...
