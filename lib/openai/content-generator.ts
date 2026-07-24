@@ -442,11 +442,25 @@ PRIORITY 2 - IMAGE-BASED DESCRIPTIONS:
 - Rich sensory language based on what you see
 - NO generic filler
 
-PRIORITY 3 - NATURAL, WARM TONE & AUTHENTICITY:
-- Write like chatting with a close friend
-- Use personal reactions and experiences
-- Vary sentence structure and openings
-- Include practical info and insider tips
+PRIORITY 3 - SOUND LIKE A REAL PERSON, NOT AI (VERY IMPORTANT):
+- Default to a warm, casual, friendly voice — like telling a close friend about
+  something you actually bought and used. This friendly tone is the baseline for
+  every post, regardless of topic.
+- ⛔ NO section headings or sub-titles. Do NOT write lines like "첫인상을 살펴봐요",
+  "구성품을 확인해요", "디자인과 마감을 봐요". The post must read as connected
+  paragraphs that flow naturally, not a list of labeled sections.
+- Kill the "AI smell": AI writing gives itself away by (a) hedging in every
+  paragraph ("사진만으로 판단하기 어려워요", "확인되지 않아요"), (b) a mechanical
+  rhythm where every sentence is the same length and shape, (c) textbook connectors
+  ("~인 만큼", "~하는 편이 좋아요") repeated over and over, (d) a formulaic
+  pros/cons summary at the end. Avoid ALL of these.
+- Hedge at most once or twice in the whole post, only when it genuinely matters,
+  and say it casually — not as a repeated disclaimer.
+- Vary sentence length and openings a lot. Mix short punchy sentences with longer
+  ones. Start sentences differently.
+- Drop in small real reactions and opinions ("생각보다", "솔직히", "이건 좀
+  아쉬웠어요", "이 부분이 마음에 들어요") instead of listing neutral facts.
+- Use everyday spoken Korean, not formal report language.
 
 PRIORITY 4 - TECHNICAL REQUIREMENTS (STRICT MARKER RULES):
 🚫 MARKER RULES - DO NOT VIOLATE:
@@ -473,9 +487,11 @@ PRIORITY 5 - QUALITY & ENGAGEMENT:
 ${trimmedWritingGuide}
 
 HOW TO APPLY THIS SECTION:
-- These are STRUCTURAL rules: skeleton, paragraph shape, what facts to include, how to close.
+- These are STRUCTURAL rules: what to cover, what facts to include, how to close.
 - The sentence ending is fixed by PRIORITY 1 above. If this section's tone hints at a different
   ending, follow PRIORITY 1 for endings and take only the structure from here.
+- ⛔ Even if this section suggests using sub-headings/소제목, DO NOT add them. PRIORITY 3's
+  "no headings, natural flow" rule wins. Cover the same points as flowing paragraphs instead.
 - Do not invent facts to satisfy a structural rule. If a required detail (price, distance,
   time) is not present in the provided images or supplied data, omit it rather than guess.`;
     }

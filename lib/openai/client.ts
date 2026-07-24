@@ -26,11 +26,14 @@ export const OPENAI_MODELS = {
 
 export type OpenAIModelId = (typeof OPENAI_MODELS)[keyof typeof OPENAI_MODELS];
 
+// 비용 절감(2026-07-24 사용자 요청): 최고 성능 sol 대신 균형 모델 terra를 기본으로 씁니다.
+// sol이 필요하면 UI의 모델 선택에서 개별 지정할 수 있습니다.
+
 /** 이미지 분석 기본 모델 */
-export const IMAGE_ANALYSIS_MODEL: OpenAIModelId = OPENAI_MODELS.GPT_5_6_SOL;
+export const IMAGE_ANALYSIS_MODEL: OpenAIModelId = OPENAI_MODELS.GPT_5_6_TERRA;
 
 /** 콘텐츠 생성 기본 모델 */
-export const CONTENT_MODEL: OpenAIModelId = OPENAI_MODELS.GPT_5_6_SOL;
+export const CONTENT_MODEL: OpenAIModelId = OPENAI_MODELS.GPT_5_6_TERRA;
 
 /** 보조 작업(팩트 추출·추천 등) 기본 모델 */
 export const UTILITY_MODEL: OpenAIModelId = OPENAI_MODELS.GPT_5_6_TERRA;

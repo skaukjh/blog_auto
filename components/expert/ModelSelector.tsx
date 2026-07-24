@@ -11,23 +11,23 @@ interface ModelSelectorProps {
 
 // ⚠️ 실존하는 모델 ID만 사용합니다. lib/openai/client.ts 의 OPENAI_MODELS 와 일치해야 합니다.
 const PRESET_CONFIGS = {
-  quality: {
-    label: '🏆 최고 품질 (추천)',
-    description: 'GPT-5.6 Sol - 이미지 분석과 글쓰기 모두 최고 성능',
-    config: {
-      imageAnalysisModel: 'gpt-5.6-sol',
-      webSearchModel: 'gpt-5.6-terra',
-      contentGenerationModel: 'gpt-5.6-sol',
-      creativity: 7,
-    },
-  },
   balanced: {
-    label: '⚖️ 균형형',
-    description: 'GPT-5.6 Terra - 성능과 비용의 균형',
+    label: '⚖️ 균형형 (추천)',
+    description: 'GPT-5.6 Terra - 성능과 비용의 균형 (기본값)',
     config: {
       imageAnalysisModel: 'gpt-5.6-terra',
       webSearchModel: 'gpt-5.6-luna',
       contentGenerationModel: 'gpt-5.6-terra',
+      creativity: 7,
+    },
+  },
+  quality: {
+    label: '🏆 최고 품질',
+    description: 'GPT-5.6 Sol - 이미지 분석과 글쓰기 모두 최고 성능 (비용 높음)',
+    config: {
+      imageAnalysisModel: 'gpt-5.6-sol',
+      webSearchModel: 'gpt-5.6-terra',
+      contentGenerationModel: 'gpt-5.6-sol',
       creativity: 7,
     },
   },
