@@ -460,6 +460,12 @@ PRIORITY 3 - SOUND LIKE A REAL PERSON, NOT AI (VERY IMPORTANT):
   ones. Start sentences differently.
 - Drop in small real reactions and opinions ("생각보다", "솔직히", "이건 좀
   아쉬웠어요", "이 부분이 마음에 들어요") instead of listing neutral facts.
+- Do NOT list specs like a catalog ("A와 B, C, D가 있어요", "~가 번호로 구분되어
+  있었어요"). Weave the parts into a sentence about what you did or noticed with them.
+- Open with a concrete, personal moment or scene — not a generic problem statement
+  everyone already knows.
+- Vary how you end. Avoid formulaic closers like "~될 거예요", "고려해 볼 만해요"
+  repeated as a template. End the way a real person would trail off after a review.
 - Use everyday spoken Korean, not formal report language.
 
 PRIORITY 4 - TECHNICAL REQUIREMENTS (STRICT MARKER RULES):
