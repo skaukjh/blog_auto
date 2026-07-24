@@ -4,20 +4,30 @@ Claude Code(claude.ai/code)가 이 저장소에서 작업할 때 참고하는 �
 
 ## 저장소 구성
 
-이 저장소에는 **독립적인 두 개의 프로젝트**가 있습니다. 각각 별도의 `package.json`과 `node_modules`를 가지며, 서로 코드를 import하지 않습니다.
+이 저장소에는 **독립적인 세 개의 프로젝트**가 있습니다. 각각 별도의 `package.json`과 `node_modules`를 가지며, 서로 코드를 import하지 않습니다.
 
 | | 위치 | 역할 | 배포 |
 |---|---|---|---|
 | **A** | 저장소 루트 | AI 블로그 글 생성 | Vercel |
-| **B** | `automation/` | 네이버 블로그 이웃 자동화 | **로컬 전용** |
+| **B** | `automation/` | 네이버 블로그 이웃 자동화 + 글쓰기 순차 입력 | **로컬 전용** (Next.js, 포트 80) |
+| **C** | `typing-app/` | 완성된 글을 네이버에 사람처럼 순차 입력 | **데스크톱 exe** (Electron) |
 
-두 프로젝트가 공유하는 것은 **Supabase의 `blog_styles` 테이블** 하나뿐입니다. 코드는 공유하지 않고, 각자 자기 사본(`lib/utils/style-storage.ts`, `lib/utils/blog-style-memory-cache.ts`)을 가집니다.
+A와 B가 공유하는 것은 **Supabase의 `blog_styles` 테이블**입니다. 코드는 공유하지 않고, 각자 자기 사본(`lib/utils/style-storage.ts`, `lib/utils/blog-style-memory-cache.ts`)을 가집니다.
 
 ```
 A: /format 분석  →  Supabase blog_styles (user_id="default")  →  B: 댓글 생성 시 문체 참조
 ```
 
 즉 **A와 B가 같은 Supabase 프로젝트를 바라보도록 양쪽 `.env.local`의 Supabase 값을 동일하게 맞춰야 합니다.**
+
+### B와 C의 관계 (둘 다 순차 입력 기능이 있음)
+
+B(`automation/`)와 C(`typing-app/`) **모두** 완성된 글을 네이버 글쓰기 화면에 사람처럼 순차 입력하는 기능을 가집니다. 로직은 공유하지 않고 각자 사본을 두지만 **동작은 동일하게 맞춰 둡니다**(로그인 셀렉터, 단어 단위 타이핑, 재작성, 문장마다 줄바꿈 등). 한쪽을 고치면 다른 쪽도 맞춰야 합니다.
+
+- B: `automation/lib/naver/post-writer.ts` (웹 UI `/write-post`에서 트리거, 서버가 브라우저 관리)
+- C: `typing-app/lib/naver-typer.cjs` (독립 exe, 크롬을 detached로 띄워 **프로그램을 꺼도 크롬 유지**)
+
+⚠️ 네이버 로그인 버튼은 2026-07 기준 `#loginBtn_row`/`#loginBtn_column`(반응형)입니다. "패스키 로그인"(`#passkeyBtn_*`)과 class가 같아 `has-text("로그인")`는 엉뚱한 버튼을 눌러 실패합니다. **셀렉터가 깨지면 `node typing-app/inspect-login.cjs` 방식으로 실제 DOM을 조사해 고치세요.**
 
 ### B를 Vercel에 올릴 수 없는 이유
 
@@ -38,15 +48,22 @@ A: /format 분석  →  Supabase blog_styles (user_id="default")  →  B: 댓글
 npm install
 npm run dev
 
-# B (네이버 자동화) - 포트 3001
+# B (네이버 자동화 + 순차 입력) - 포트 80
 cd automation
 npm install
-npx playwright install chromium   # 최초 1회
-cp .env.local.example .env.local  # 값 채우기
-npm run dev
+cp .env.local.example .env.local  # 값 채우기 (A와 동일한 Supabase 값)
+npm run dev                        # 브라우저에서 http://localhost 접속
+
+# C (순차입력기 exe) - 빌드
+cd typing-app
+npm install
+npm run build                      # dist-single/네이버블로그순차입력기.exe (단일 파일)
+# 실행: 그 exe를 더블클릭 (시스템 크롬 필요)
 ```
 
-두 프로젝트는 포트가 달라 동시에 띄울 수 있습니다.
+A와 B는 포트가 달라(3000 / 80) 동시에 띄울 수 있습니다. C는 독립 exe라 별개입니다.
+
+⚠️ B의 hosts 도메인은 `jsy.auto.blog.com`입니다(`setup-hosts.bat`, 관리자 권한 필요, 백신이 hosts 수정을 막을 수 있음). 도메인 없이 `http://localhost`로도 접속됩니다.
 
 ### 품질 검증
 
@@ -305,7 +322,8 @@ node automation/scripts/verify-supabase.mjs
 
 ### 해결된 이슈
 
-- `lib/openai/client.ts`의 가짜 모델명(`gpt-5.2`, `claude-opus-4-6`, `gemini-3-pro` 등)은 `7424835`에서 제거됐습니다. 현재는 `gpt-5.6-sol`(이미지 분석·본문 생성) / `gpt-5.6-terra`(보조) / `gpt-5.6-luna` / `gpt-4o` 계열만 있습니다. **모델을 추가할 때는 반드시 `GET /v1/models`로 실재 여부를 먼저 확인하세요.** GPT-5 계열은 `max_tokens`/`temperature`를 거부하며 `buildChatParams()`가 이를 흡수합니다.
+- `lib/openai/client.ts`의 가짜 모델명(`gpt-5.2`, `claude-opus-4-6`, `gemini-3-pro` 등)은 `7424835`에서 제거됐습니다. 현재 실재 모델은 `gpt-5.6-sol` / `gpt-5.6-terra` / `gpt-5.6-luna` / `gpt-4o` 계열입니다. **모델을 추가할 때는 반드시 `GET /v1/models`로 실재 여부를 먼저 확인하세요.** GPT-5 계열은 `max_tokens`/`temperature`를 거부하며 `buildChatParams()`가 이를 흡수합니다.
+- **기본 모델은 `gpt-5.6-terra`입니다**(2026-07-24 비용 절감). 이미지 분석·본문 생성 모두 terra. 공식 단가(1M 토큰): sol $5/$30, terra $2.5/$15, luna $1/$6 — **terra는 sol의 정확히 절반**. 글 1편(이미지 5~9장) 약 140원. UI 모델 선택에서 sol(최고품질)로 개별 지정 가능.
 
 ---
 
