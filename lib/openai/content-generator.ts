@@ -481,6 +481,16 @@ PRIORITY 3 - SOUND LIKE A REAL PERSON, NOT AI (VERY IMPORTANT):
 - Vary how you end. Avoid formulaic closers like "~될 거예요", "고려해 볼 만해요"
   repeated as a template. End the way a real person would trail off after a review.
 - Use everyday spoken Korean, not formal report language.
+- ⛔ Avoid stiff, translated-sounding, or ad-copy phrasing that real people don't
+  actually say. Concrete fixes:
+  · "설렘은 충분했어요" → "설렘이 가득했어요" / "괜히 설레더라고요"
+  · "존재감이 확실했어요" → "확실히 눈에 띄었어요" / "생각보다 훨씬 눈에 들어왔어요"
+  · "레트로 무드를 예고해줘요" → "레트로한 느낌이 딱 났어요"
+  · "입체적인 실루엣이 살아 있어요" → "옆에서 보면 입체적으로 보여요"
+  · "정교하게 정리된 인상을 줘요" → "깔끔하게 잘 정리돼 보여요"
+  Do NOT use: "~을 예고하다", "~가 살아 있다", "존재감이 확실하다", "인상을 준다",
+  "~을 자랑하다", "~가 돋보인다" or other showroom/catalog copy. Write like you're
+  chatting, not like a product description page.
 
 PRIORITY 4 - TECHNICAL REQUIREMENTS (STRICT MARKER RULES):
 🚫 MARKER RULES - DO NOT VIOLATE:
