@@ -195,7 +195,9 @@
         const body = $('content').value;
         const sentences = (body.match(/[.!?]/g) || []).length;
         const paragraphs = body.split(/\n\s*\n/).length - 1;
-        const ms = chars * delay + sentences * 575 + paragraphs * 1550;
+        // 글자별 딜레이 변동(≈1.3배) + 오타·문장중간 멈춤 오버헤드,
+        // 문장 사이 5~10초(평균 7.5초), 문단 사이 8~15초(평균 11.5초)
+        const ms = chars * delay * 1.35 + sentences * 7500 + paragraphs * 11500;
         $('estimate').value = `약 ${Math.max(1, Math.round(ms / 60000))}분`;
       }
 

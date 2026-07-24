@@ -28,6 +28,26 @@ const BODY_SELECTORS = [
   'div[class*="se-text"] [contenteditable="true"]',
 ];
 
+/** 네이버 로그인 화면의 아이디/비밀번호 입력칸 (앞에서부터 시도) */
+const LOGIN_ID_SELECTORS = ['#id', 'input[name="id"]', 'input[id="id"]'];
+const LOGIN_PW_SELECTORS = ['#pw', 'input[name="pw"]', 'input[id="pw"]'];
+
+/**
+ * 네이버 로그인 버튼 (앞에서부터 시도).
+ *
+ * 핵심은 `id="log.login"` 으로, 네이버가 오래 유지해 온 표준 로그인 버튼입니다.
+ * id에 점(.)이 있어 CSS class로 오인되지 않도록 [id="..."] 속성 선택자를 씁니다.
+ * has-text("로그인")는 간편로그인 탭 등 다른 "로그인" 요소와 충돌해 마지막 폴백입니다.
+ */
+const LOGIN_BUTTON_SELECTORS = [
+  '[id="log.login"]',
+  'button[type="submit"].btn_login',
+  '.btn_login',
+  'button.btn_login',
+  'button[type="submit"]',
+  'button:has-text("로그인")',
+];
+
 function randomBetween(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -168,17 +188,65 @@ async function findFirstVisible(frame, selectors, label, log, timeoutMs = 15000)
   throw new Error(`${label} 입력 영역을 찾지 못했습니다.`);
 }
 
-/** 문장 하나를 사람처럼 타이핑 */
-async function typeSentence(page, sentence, baseDelayMs) {
-  const delay = randomBetween(Math.round(baseDelayMs * 0.6), Math.round(baseDelayMs * 1.4));
+/**
+ * page(또는 frame)에서 후보 셀렉터 중 실제로 보이는 첫 요소를 반환합니다.
+ * findFirstVisible과 달리 로그인 화면(iframe 아님)에서 씁니다.
+ */
+async function firstVisibleLocator(page, selectors, label, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs;
 
-  if (sentence.length > 25) {
-    const breakPoint = randomBetween(10, sentence.length - 5);
-    await page.keyboard.type(sentence.slice(0, breakPoint), { delay });
-    await sleep(randomBetween(150, 500));
-    await page.keyboard.type(sentence.slice(breakPoint), { delay });
-  } else {
-    await page.keyboard.type(sentence, { delay });
+  while (Date.now() < deadline) {
+    for (const selector of selectors) {
+      try {
+        const element = page.locator(selector).first();
+        if (await element.isVisible({ timeout: 800 })) {
+          return element;
+        }
+      } catch {
+        // 다음 후보로
+      }
+    }
+    await sleep(400);
+  }
+
+  throw new Error(`${label}을(를) 찾지 못했습니다.`);
+}
+
+/** 오타 흉내에 쓸 흔한 글자들 (실제로 잠깐 쳤다가 지웁니다) */
+const TYPO_CHARS = ['ㅁ', 'ㅇ', 'ㄴ', 'ㅏ', 'ㅡ', 'a', 's', 'o', 'ㅔ', 'ㅐ'];
+
+/**
+ * 문장 하나를 진짜 사람처럼 타이핑합니다.
+ *
+ * - 글자마다 딜레이가 제각각입니다 (한 박자로 치지 않음)
+ * - 문장 중간에 가끔 2~5초 멈춥니다 (생각하는 것처럼)
+ * - 가끔 글자를 잘못 쳤다가 지우고 다시 칩니다 (오타 수정)
+ *
+ * @param baseDelayMs 사용자가 고른 속도. 글자별로 이 값의 0.5~1.8배로 흔듭니다.
+ */
+async function typeSentence(page, sentence, baseDelayMs) {
+  for (let i = 0; i < sentence.length; i++) {
+    const ch = sentence[i];
+
+    // 가끔(3%) 오타: 엉뚱한 글자를 쳤다가 지우고 제대로 칩니다.
+    // 문장 첫 2글자와 공백에서는 하지 않습니다.
+    if (i > 2 && ch !== ' ' && Math.random() < 0.03) {
+      const typo = TYPO_CHARS[randomBetween(0, TYPO_CHARS.length - 1)];
+      await page.keyboard.type(typo);
+      await sleep(randomBetween(180, 450)); // 오타를 알아챌 때까지
+      await page.keyboard.press('Backspace');
+      await sleep(randomBetween(150, 380)); // 지우고 다시 치기 전 잠깐
+    }
+
+    await page.keyboard.type(ch);
+
+    // 글자별 딜레이를 크게 흔들어 한 박자로 안 보이게 합니다.
+    await sleep(randomBetween(Math.round(baseDelayMs * 0.5), Math.round(baseDelayMs * 1.8)));
+
+    // 가끔(2.5%) 문장 중간에 2~5초 멈춥니다 (다음 말을 고르는 것처럼).
+    if (i > 3 && i < sentence.length - 3 && ch !== ' ' && Math.random() < 0.025) {
+      await sleep(randomBetween(2000, 5000));
+    }
   }
 }
 
@@ -252,11 +320,33 @@ async function typePost(options) {
     });
 
     log('아이디와 비밀번호를 입력합니다...', 8);
-    await page.locator('input[name="id"]').first().fill(blogId, { delay: 100 });
+
+    // 아이디/비밀번호 입력칸을 폴백으로 찾습니다.
+    const idField = await firstVisibleLocator(page, LOGIN_ID_SELECTORS, '아이디 입력칸');
+    await idField.click();
+    await idField.fill(blogId, { delay: 80 });
     await sleep(500);
-    await page.locator('input[name="pw"]').first().fill(blogPassword, { delay: 100 });
+
+    const pwField = await firstVisibleLocator(page, LOGIN_PW_SELECTORS, '비밀번호 입력칸');
+    await pwField.click();
+    await pwField.fill(blogPassword, { delay: 80 });
     await sleep(500);
-    await page.locator('button:has-text("로그인")').first().click();
+
+    // 로그인 버튼을 폴백으로 찾아 클릭합니다. 못 찾으면 비밀번호 칸에서 Enter로 제출합니다.
+    log('로그인 버튼을 누릅니다...', 9);
+    const loginButton = await firstVisibleLocator(
+      page,
+      LOGIN_BUTTON_SELECTORS,
+      '로그인 버튼',
+      5000
+    ).catch(() => null);
+
+    if (loginButton) {
+      await loginButton.click();
+    } else {
+      log('로그인 버튼을 못 찾아 Enter로 제출합니다.');
+      await pwField.press('Enter');
+    }
 
     log('로그인 처리 중입니다. 2차 인증이 뜨면 크롬 창에서 직접 완료하세요 (최대 2분)', 10);
 
@@ -330,12 +420,14 @@ async function typePost(options) {
           percent,
         });
 
-        await sleep(randomBetween(250, 900));
+        // 문장 사이는 5~10초 쉽니다 (사람이 다음 문장을 생각하듯).
+        await sleep(randomBetween(5000, 10000));
       }
 
       if (p < paragraphs.length - 1) {
         await page.keyboard.press('Enter');
-        await sleep(randomBetween(900, 2200));
+        // 문단(문단 = 글 덩어리) 사이는 더 길게 8~15초 쉽니다.
+        await sleep(randomBetween(8000, 15000));
       }
     }
 
