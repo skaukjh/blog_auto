@@ -222,26 +222,52 @@ async function findFirstVisible(
 }
 
 /**
- * 문장 하나를 사람처럼 타이핑합니다.
+ * 단어를 고민하는 것처럼, 잠깐 다른 짧은 말을 썼다가 지우는 데 쓰는 후보입니다.
+ * (순차입력기 exe의 naver-typer.cjs와 동일한 방식)
+ */
+const HESITATION_WORDS = ['좀 ', '약간 ', '조금 ', '뭔가 ', '그 ', '이제 ', '살짝 '];
+
+/** 글자들을 하나씩, 딜레이를 흔들어 가며 칩니다 */
+async function typeChars(page: any, text: string, baseDelayMs: number): Promise<void> {
+  for (const ch of text) {
+    await page.keyboard.type(ch);
+    // 글자별 딜레이를 크게 흔들어 한 박자로 안 보이게 합니다.
+    await sleep(randomBetween(Math.round(baseDelayMs * 0.5), Math.round(baseDelayMs * 1.8)));
+  }
+}
+
+/**
+ * 문장 하나를 진짜 사람처럼 타이핑합니다.
  *
- * Playwright의 type()은 호출 한 번에 고정 간격만 쓸 수 있어서, 문장마다
- * 간격을 다시 뽑아 단조로움을 줄입니다. 긴 문장은 중간에 한 번 더 쉽니다.
+ * - 글자마다 딜레이가 제각각입니다 (한 박자로 치지 않음)
+ * - 단어와 단어 사이에서 가끔 멈춥니다 (생각하는 것처럼)
+ * - 가끔 엉뚱한 짧은 단어를 썼다가 지우고 원래 단어를 씁니다 (단어를 고르며 고쳐 쓰는 느낌)
  */
 async function typeSentence(page: any, sentence: string, baseDelayMs: number): Promise<void> {
-  // 문장별로 ±40% 범위에서 속도를 흔듭니다.
-  const delay = randomBetween(
-    Math.round(baseDelayMs * 0.6),
-    Math.round(baseDelayMs * 1.4)
-  );
+  // 단어 단위로 나눕니다. 뒤따르는 공백을 단어에 붙여 그대로 재현합니다.
+  const words = sentence.match(/\S+\s*/g) || [sentence];
 
-  // 25자가 넘는 문장은 중간에 한 번 멈춰 실제 타이핑처럼 보이게 합니다.
-  if (sentence.length > 25) {
-    const breakPoint = randomBetween(10, sentence.length - 5);
-    await page.keyboard.type(sentence.slice(0, breakPoint), { delay });
-    await sleep(randomBetween(150, 500));
-    await page.keyboard.type(sentence.slice(breakPoint), { delay });
-  } else {
-    await page.keyboard.type(sentence, { delay });
+  for (let w = 0; w < words.length; w++) {
+    // 가끔(3%) 다른 짧은 단어를 썼다가 지우고 원래 단어를 씁니다.
+    if (w > 0 && w < words.length - 1 && Math.random() < 0.03) {
+      const wrong = HESITATION_WORDS[randomBetween(0, HESITATION_WORDS.length - 1)];
+      await typeChars(page, wrong, baseDelayMs);
+      await sleep(randomBetween(300, 700)); // "아, 이 말이 아닌데" 하는 순간
+      for (let k = 0; k < wrong.length; k++) {
+        await page.keyboard.press('Backspace');
+        await sleep(randomBetween(30, 90));
+      }
+      await sleep(randomBetween(200, 500));
+      // 이어서 아래 일반 타이핑으로 원래 단어를 칩니다.
+    }
+
+    // 일반 단어 타이핑 (원래 단어)
+    await typeChars(page, words[w], baseDelayMs);
+
+    // 단어 사이에서 가끔(4%) 잠깐 멈춥니다 (글자 중간이 아니라 단어 경계).
+    if (w > 0 && w < words.length - 1 && Math.random() < 0.04) {
+      await sleep(randomBetween(600, 1400));
+    }
   }
 }
 
@@ -260,8 +286,6 @@ export async function writePostSequentially(
     title,
     content,
     charDelayMs = 55,
-    sentencePauseMs = [250, 900],
-    paragraphPauseMs = [900, 2200],
     stripImageMarkers = false,
     autoPublish = false,
   } = options;
@@ -323,13 +347,16 @@ export async function writePostSequentially(
       for (const sentence of sentences) {
         await typeSentence(page, sentence, charDelayMs);
         typedChars += sentence.length;
-        await sleep(randomBetween(sentencePauseMs[0], sentencePauseMs[1]));
+        // 문장이 끝나면 무조건 줄을 바꿉니다 (순차입력기 exe와 동일).
+        await page.keyboard.press('Enter');
+        // 문장 사이 간격.
+        await sleep(randomBetween(1000, 2000));
       }
 
-      // 마지막 문단이 아니면 줄바꿈하고 잠시 쉽니다.
+      // 문단이 바뀔 때는 빈 줄을 하나 더 넣어 문단을 구분합니다.
       if (p < paragraphs.length - 1) {
         await page.keyboard.press('Enter');
-        await sleep(randomBetween(paragraphPauseMs[0], paragraphPauseMs[1]));
+        await sleep(randomBetween(1500, 3000));
       }
 
       const elapsedSec = Math.round((Date.now() - startedAt) / 1000);

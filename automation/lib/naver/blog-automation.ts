@@ -112,9 +112,35 @@ export class NaverBlogAutomation {
       await this.page.waitForTimeout(500);
 
       // 로그인 버튼 클릭
+      // ⚠️ 2026-07 기준 네이버 로그인 버튼은 #loginBtn_row/#loginBtn_column(반응형)입니다.
+      //    같은 화면의 "패스키 로그인"(#passkeyBtn_*)과 class가 같아 has-text("로그인")는
+      //    엉뚱한 버튼을 눌러 실패합니다. id 우선 + text-is("로그인")로 정확히 잡습니다.
       console.log('[Playwright] 로그인 버튼 클릭 중...');
-      const loginButton = await this.page.locator('button:has-text("로그인")').first();
-      await loginButton.click();
+      const loginButtonSelectors = [
+        '#loginBtn_row',
+        '#loginBtn_column',
+        'button[id^="loginBtn"]',
+        'button.btn_done:text-is("로그인")',
+        'button:text-is("로그인")',
+      ];
+      let loginClicked = false;
+      for (const sel of loginButtonSelectors) {
+        try {
+          const btn = this.page.locator(sel).first();
+          if (await btn.isVisible({ timeout: 1000 })) {
+            await btn.click();
+            loginClicked = true;
+            break;
+          }
+        } catch {
+          // 다음 후보로
+        }
+      }
+      if (!loginClicked) {
+        // 버튼을 못 찾으면 비밀번호 칸에서 Enter로 제출합니다 (네이버는 Enter로도 로그인).
+        console.log('[Playwright] 로그인 버튼을 못 찾아 Enter로 제출');
+        await pwInput.press('Enter');
+      }
 
       // 2차 인증 대기 (최대 2분)
       console.log('[Playwright] 로그인 처리 중... (2차 인증 대기)');

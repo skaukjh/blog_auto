@@ -69,23 +69,22 @@ export default function Navigation() {
   return (
     <nav className="glass-effect border-b border-white/50 sticky top-0 z-50 shadow-md-soft">
       <div className="max-w-7xl mx-auto px-6 py-4">
-        <div className="flex items-center justify-between gap-6">
-          <div className="flex items-center gap-8">
-            <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+            <div className="flex items-center gap-2 shrink-0">
               <span className="text-2xl">🤝</span>
-              <h1 className="text-xl font-bold gradient-text">네이버 블로그 자동화</h1>
-              <span className="ml-2 px-2 py-0.5 text-xs rounded bg-amber-100 text-amber-800 font-medium">
-                로컬 전용
-              </span>
+              <h1 className="text-xl font-bold gradient-text whitespace-nowrap">
+                네이버 블로그 자동화
+              </h1>
             </div>
 
-            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+            <div className="flex flex-wrap gap-1 bg-gray-100 rounded-lg p-1">
               {TABS.map((tab) => (
                 <button
                   key={tab.path}
                   onClick={() => router.push(tab.path)}
                   disabled={restarting}
-                  className={`px-4 py-2 rounded-md font-medium smooth-transition flex items-center gap-2 disabled:opacity-50 ${
+                  className={`px-3.5 py-2 rounded-md font-medium smooth-transition flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50 ${
                     pathname === tab.path
                       ? 'bg-white shadow-md-soft text-primary'
                       : 'text-gray-600 hover:text-gray-900'
