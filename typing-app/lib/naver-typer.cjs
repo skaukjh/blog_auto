@@ -215,39 +215,58 @@ async function firstVisibleLocator(page, selectors, label, timeoutMs = 15000) {
   throw new Error(`${label}을(를) 찾지 못했습니다.`);
 }
 
-/** 오타 흉내에 쓸 흔한 글자들 (실제로 잠깐 쳤다가 지웁니다) */
-const TYPO_CHARS = ['ㅁ', 'ㅇ', 'ㄴ', 'ㅏ', 'ㅡ', 'a', 's', 'o', 'ㅔ', 'ㅐ'];
+/** 글자들을 하나씩, 딜레이를 흔들어 가며 칩니다 */
+async function typeChars(page, text, baseDelayMs) {
+  for (const ch of text) {
+    await page.keyboard.type(ch);
+    // 글자별 딜레이를 크게 흔들어 한 박자로 안 보이게 합니다.
+    await sleep(randomBetween(Math.round(baseDelayMs * 0.5), Math.round(baseDelayMs * 1.8)));
+  }
+}
 
 /**
  * 문장 하나를 진짜 사람처럼 타이핑합니다.
  *
  * - 글자마다 딜레이가 제각각입니다 (한 박자로 치지 않음)
- * - 문장 중간에 가끔 2~5초 멈춥니다 (생각하는 것처럼)
- * - 가끔 글자를 잘못 쳤다가 지우고 다시 칩니다 (오타 수정)
+ * - 단어와 단어 사이에서 가끔 멈춥니다 (생각하는 것처럼)
+ * - 가끔 2~3단어를 쓰다가 통째로 지우고 다시 씁니다 (실제로 고쳐 쓰는 느낌)
  *
  * @param baseDelayMs 사용자가 고른 속도. 글자별로 이 값의 0.5~1.8배로 흔듭니다.
  */
 async function typeSentence(page, sentence, baseDelayMs) {
-  for (let i = 0; i < sentence.length; i++) {
-    const ch = sentence[i];
+  // 단어 단위로 나눕니다. 뒤따르는 공백을 단어에 붙여 그대로 재현합니다.
+  const words = sentence.match(/\S+\s*/g) || [sentence];
 
-    // 가끔(3%) 오타: 엉뚱한 글자를 쳤다가 지우고 제대로 칩니다.
-    // 문장 첫 2글자와 공백에서는 하지 않습니다.
-    if (i > 2 && ch !== ' ' && Math.random() < 0.03) {
-      const typo = TYPO_CHARS[randomBetween(0, TYPO_CHARS.length - 1)];
-      await page.keyboard.type(typo);
-      await sleep(randomBetween(180, 450)); // 오타를 알아챌 때까지
-      await page.keyboard.press('Backspace');
-      await sleep(randomBetween(150, 380)); // 지우고 다시 치기 전 잠깐
+  for (let w = 0; w < words.length; w++) {
+    // 가끔(2.5%) 이 단어부터 2~3단어를 썼다가 통째로 지우고 다시 씁니다.
+    // 문장 첫 단어와 끝 두 단어에서는 하지 않습니다.
+    if (w > 0 && w < words.length - 2 && Math.random() < 0.025) {
+      const redoCount = randomBetween(2, 3);
+      const chunk = words.slice(w, w + redoCount).join('');
+
+      // 1) 일단 정상적으로 씁니다.
+      await typeChars(page, chunk, baseDelayMs);
+      await sleep(randomBetween(300, 700)); // 잘못 썼다고 느끼는 순간
+
+      // 2) 방금 친 만큼 백스페이스로 지웁니다 (빠르게).
+      for (let k = 0; k < chunk.length; k++) {
+        await page.keyboard.press('Backspace');
+        await sleep(randomBetween(30, 90));
+      }
+      await sleep(randomBetween(250, 600)); // 다시 쓰기 전 잠깐
+
+      // 3) 같은 내용을 다시 씁니다.
+      await typeChars(page, chunk, baseDelayMs);
+
+      w += redoCount - 1; // 이미 처리한 단어들은 건너뜁니다.
+      continue;
     }
 
-    await page.keyboard.type(ch);
+    // 일반 단어 타이핑
+    await typeChars(page, words[w], baseDelayMs);
 
-    // 글자별 딜레이를 크게 흔들어 한 박자로 안 보이게 합니다.
-    await sleep(randomBetween(Math.round(baseDelayMs * 0.5), Math.round(baseDelayMs * 1.8)));
-
-    // 가끔(2%) 문장 중간에 잠깐 멈춥니다 (다음 말을 고르는 것처럼).
-    if (i > 3 && i < sentence.length - 3 && ch !== ' ' && Math.random() < 0.02) {
+    // 단어 사이에서 가끔(4%) 잠깐 멈춥니다 (다음 말을 고르듯). 글자 중간이 아니라 단어 경계.
+    if (w > 0 && w < words.length - 1 && Math.random() < 0.04) {
       await sleep(randomBetween(600, 1400));
     }
   }
