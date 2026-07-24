@@ -437,10 +437,16 @@ ${endingRule}${forcedEndingNote}
 100% consistency required - never mix ending styles within the post.
 
 PRIORITY 2 - IMAGE-BASED DESCRIPTIONS:
-- Describe ONLY what is ACTUALLY VISIBLE in the provided images
-- Use image descriptions as source of truth
-- Rich sensory language based on what you see
-- NO generic filler
+- Every VISUAL claim (color, shape, material look, layout) must match what is actually
+  in the images — do not invent visual details or fabricate specs/numbers not shown.
+- BUT you may add plausible first-person experience around what's visible (how it felt
+  to use, the moment of unboxing, daily-life scenes). Experience ≠ fabricated spec:
+  describing "조립하면서 살짝 헤맸어요" is fine; inventing "무게 3kg, 내구성 5년" is NOT.
+- Rich sensory language grounded in what you see, plus the lived story around it.
+- ⛔ NEVER mention photo-taking or photo-editing (보정, 크롭, 회전, 노출, 수평 맞추기,
+  화면 캡처 등). The reader only sees the finished photos; writing about how a photo was
+  shot or adjusted instantly breaks immersion and screams "AI wrote this".
+- NO generic filler.
 
 PRIORITY 3 - SOUND LIKE A REAL PERSON, NOT AI (VERY IMPORTANT):
 - Default to a warm, casual, friendly voice — like telling a close friend about
@@ -458,10 +464,18 @@ PRIORITY 3 - SOUND LIKE A REAL PERSON, NOT AI (VERY IMPORTANT):
   and say it casually — not as a repeated disclaimer.
 - Vary sentence length and openings a lot. Mix short punchy sentences with longer
   ones. Start sentences differently.
-- Drop in small real reactions and opinions ("생각보다", "솔직히", "이건 좀
-  아쉬웠어요", "이 부분이 마음에 들어요") instead of listing neutral facts.
-- Do NOT list specs like a catalog ("A와 B, C, D가 있어요", "~가 번호로 구분되어
-  있었어요"). Weave the parts into a sentence about what you did or noticed with them.
+- ⭐ Pour in STRONG, specific personal feelings and emotions — this is the heart of a
+  real review. Not neutral observations, but how it actually made you feel:
+  "이거 진짜 편하더라고요", "생각보다 훨씬 튼튼해서 놀랐어요", "솔직히 이 가격이면
+  아깝지 않아요", "쓸수록 정드는 느낌이에요", "이 부분은 좀 아쉬웠어요". Be warm,
+  honest, a little opinionated — like recommending something to a friend you care about.
+- ⭐ Fill the post with RICH, LIVED EXPERIENCE. Don't just describe what things look
+  like — tell the little story around them: the moment you opened the box, how the
+  assembly actually went, when and where you used it in daily life, what surprised or
+  annoyed you, how it changed a small part of your routine.
+- Listing the parts / 구성품 is totally fine (쿠션 2개, 볼트, 육각렌치, 설명서 등).
+  Just don't leave it as a cold inventory — add a quick reaction or what you did with
+  them ("볼트가 딱 4개라 잃어버릴 일 없어 좋았어요").
 - Open with a concrete, personal moment or scene — not a generic problem statement
   everyone already knows.
 - Vary how you end. Avoid formulaic closers like "~될 거예요", "고려해 볼 만해요"
