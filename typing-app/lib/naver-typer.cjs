@@ -6,10 +6,45 @@
  * 공유하지 않고 각자 사본을 가집니다 (저장소 규칙).
  *
  * 브라우저는 Playwright가 내려받은 Chromium이 아니라 **시스템에 설치된 크롬**을
- * 씁니다(channel: 'chrome'). 그래야 exe에 300MB짜리 브라우저를 넣지 않아도 되고,
- * 평소 쓰던 크롬이라 네이버 쪽에서도 덜 낯설게 봅니다.
+ * 씁니다. 그래야 exe에 300MB짜리 브라우저를 넣지 않아도 되고, 평소 쓰던 크롬이라
+ * 네이버 쪽에서도 덜 낯설게 봅니다.
+ *
+ * ⭐ 크롬을 launch()로 띄우지 않고 **detached 프로세스로 직접 실행한 뒤 CDP로 연결**합니다.
+ *    launch()는 프로그램이 종료되면(Electron이 Job Object로 자식을 묶어) 크롬도 함께
+ *    죽습니다. detached spawn + connectOverCDP는 연결만 끊길 뿐 크롬 창은 그대로 남습니다.
+ *    (사용자 요청: 프로그램을 꺼도 크롬과 입력 내용이 유지되어야 함)
  */
 const { chromium } = require('playwright-core');
+const { spawn } = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const net = require('node:net');
+
+/** 시스템에 설치된 크롬 실행 파일 경로를 찾습니다 */
+function findChromePath() {
+  const candidates = [
+    path.join(process.env['ProgramFiles'] || 'C:\\Program Files', 'Google\\Chrome\\Application\\chrome.exe'),
+    path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Google\\Chrome\\Application\\chrome.exe'),
+    path.join(process.env.LOCALAPPDATA || '', 'Google\\Chrome\\Application\\chrome.exe'),
+  ];
+  for (const c of candidates) {
+    if (c && fs.existsSync(c)) return c;
+  }
+  return null;
+}
+
+/** 비어 있는 TCP 포트를 하나 얻습니다 (CDP 원격 디버깅용) */
+function getFreePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.on('error', reject);
+    server.listen(0, () => {
+      const port = server.address().port;
+      server.close(() => resolve(port));
+    });
+  });
+}
 
 /** 스마트에디터 ONE 본문 영역 식별 (앞에서부터 시도) */
 const EDITOR_ROOT_SELECTORS = ['.se-content', '.se-viewer', 'div[class*="se-container"]'];
@@ -325,25 +360,52 @@ async function typePost(options) {
       }
     }
 
-    // 1) 시스템 크롬 실행
+    // 1) 시스템 크롬을 detached 프로세스로 실행하고 CDP로 연결합니다.
+    //    이렇게 해야 프로그램(exe)을 꺼도 크롬 창과 입력 내용이 그대로 남습니다.
     log('크롬을 실행합니다...', 2);
-    browser = await chromium.launch({
-      headless: false,
-      channel: 'chrome',
-      args: ['--disable-blink-features=AutomationControlled', '--disable-dev-shm-usage'],
-      // 프로그램(exe)을 꺼도 크롬 창은 그대로 남게 합니다.
-      // Playwright가 프로세스 종료 시그널에 브라우저를 함께 닫지 않도록 막습니다.
-      handleSIGINT: false,
-      handleSIGTERM: false,
-      handleSIGHUP: false,
-    });
+    const chromePath = findChromePath();
+    if (!chromePath) {
+      throw new Error('크롬을 찾을 수 없습니다. 크롬 브라우저를 설치한 뒤 다시 시도해주세요.');
+    }
 
-    // 사용자가 크롬 창을 직접 닫으면 즉시 알아채 멈추도록 합니다.
+    const debugPort = await getFreePort();
+    // 매 실행마다 별도 프로필을 써서, 앞서 띄워 둔 크롬이 남아 있어도 충돌하지 않게 합니다.
+    const userDataDir = path.join(os.tmpdir(), `naver-typer-chrome-${debugPort}`);
+
+    const chromeProc = spawn(
+      chromePath,
+      [
+        `--remote-debugging-port=${debugPort}`,
+        `--user-data-dir=${userDataDir}`,
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--disable-blink-features=AutomationControlled',
+      ],
+      { detached: true, stdio: 'ignore' }
+    );
+    chromeProc.unref(); // 부모(프로그램)와 완전히 분리 → 프로그램이 꺼져도 크롬은 유지
+
+    // 크롬이 뜰 때까지 CDP 연결을 재시도합니다 (최대 10초).
+    log('크롬에 연결하는 중입니다...', 4);
+    for (let i = 0; i < 20 && !browser; i++) {
+      await sleep(500);
+      try {
+        browser = await chromium.connectOverCDP(`http://127.0.0.1:${debugPort}`);
+      } catch {
+        // 아직 준비 전 - 재시도
+      }
+    }
+    if (!browser) {
+      throw new Error('크롬에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.');
+    }
+
+    // 사용자가 크롬 창을 직접 닫으면(연결이 끊기면) 즉시 알아채 멈추도록 합니다.
     browser.on('disconnected', () => {
       browserAlive = false;
     });
 
-    const page = await browser.newPage();
+    const context = browser.contexts()[0] || (await browser.newContext());
+    const page = context.pages()[0] || (await context.newPage());
     page.on('close', () => {
       browserAlive = false;
     });

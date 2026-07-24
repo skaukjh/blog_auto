@@ -2,7 +2,7 @@
 title hosts 파일 설정 - 관리자 권한 필요
 
 REM ============================================================
-REM  blog.ssyeonee27.com 을 이 PC로 연결합니다.
+REM  jsy.auto.blog.com 을 이 PC로 연결합니다.
 REM
 REM  [주의] 반드시 이 파일을 우클릭 - "관리자 권한으로 실행" 하세요.
 REM         hosts 파일은 관리자만 수정할 수 있습니다.
@@ -25,7 +25,7 @@ if %errorLevel% neq 0 (
 )
 
 set HOSTS=%SystemRoot%\System32\drivers\etc\hosts
-set DOMAIN=blog.ssyeonee27.com
+set DOMAIN=jsy.auto.blog.com
 
 findstr /C:"%DOMAIN%" "%HOSTS%" >nul 2>&1
 if %errorLevel% equ 0 (

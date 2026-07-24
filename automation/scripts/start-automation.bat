@@ -16,7 +16,7 @@ cd /d "%~dp0.."
 
 echo.
 echo   네이버 블로그 자동화를 시작합니다
-echo   주소: http://blog.ssyeonee27.com  (또는 http://localhost)
+echo   주소: http://jsy.auto.blog.com  (또는 http://localhost)
 echo   이 창을 닫으면 서버가 종료됩니다.
 echo.
 
