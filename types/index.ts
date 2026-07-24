@@ -51,6 +51,25 @@ export interface BlogPost {
   excerpt: string;
 }
 
+/**
+ * 문체를 저장하는 단위.
+ * 전문가별로 따로 학습시키되, 'common'은 전문가 지정 없이 분석한 문체로
+ * 해당 전문가의 문체가 아직 없을 때의 폴백입니다.
+ */
+export type StyleScope = ExpertType | 'common';
+
+/** 문체 분석 결과 1건 */
+export interface StoredBlogStyle {
+  /** 분석된 스타일 가이드 본문 */
+  style: string;
+  /** ISO 8601 분석 시각 */
+  analyzedAt: string;
+  /** 분석에 사용한 예시글 수 */
+  sampleCount: number;
+  /** 이 문체가 실제로 어느 scope에서 왔는지 (폴백이면 요청한 값과 다를 수 있음) */
+  scope: StyleScope;
+}
+
 // 이미지 가이드 관련 타입
 export interface ImageGuide {
   index: number;

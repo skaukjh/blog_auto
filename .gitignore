@@ -21,6 +21,9 @@
 .env.development.local
 .env.test.local
 .env.production.local
+# 키 교체 시 만드는 백업본에도 자격증명이 들어 있습니다
+.env.local.bak*
+**/.env.local.bak*
 
 # Logs
 npm-debug.log*
@@ -56,3 +59,16 @@ investigate-popup*
 /automation/.env.local
 
 
+
+.vercel
+.env*
+
+# 구매한 전자책 등 제3자 저작물. 커밋·배포하지 않습니다.
+# (docs/archive 의 자체 문서는 계속 추적합니다)
+/docs/*.pdf
+/docs/.extracted/
+
+# C: 순차입력기 데스크톱 앱 (빌드 산출물)
+/typing-app/node_modules/
+/typing-app/dist/
+/typing-app/dist-single/

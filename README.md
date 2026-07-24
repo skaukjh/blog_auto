@@ -9,7 +9,7 @@
 | **A** | 저장소 루트 | AI 블로그 글 생성 | Vercel 배포 / 로컬 3000 |
 | **B** | `automation/` | 네이버 블로그 이웃 자동화 | **로컬 전용** 3001 |
 
-두 프로젝트는 `data/blog-style.txt` 파일 하나만 공유합니다. A가 분석해서 쓰고, B가 댓글 문체를 맞출 때 읽습니다.
+두 프로젝트는 Supabase의 `blog_styles` 테이블 하나만 공유합니다. A가 분석해서 쓰고, B가 댓글 문체를 맞출 때 읽습니다. 코드는 공유하지 않습니다.
 
 ---
 
@@ -17,9 +17,9 @@
 
 ### 무엇을 하나
 
-1. **문체 학습** — 내 블로그 글 2개를 붙여넣으면 GPT-4o가 문체를 분석합니다. 종결어미(`~~요` / `~~다`), 톤, 자주 쓰는 표현을 뽑아 `data/blog-style.txt`에 저장합니다.
+1. **문체 학습** — 내 블로그 글 2개를 붙여넣으면 문체를 분석합니다. 종결어미(`~~요` / `~~다`), 톤, 자주 쓰는 표현을 뽑아 Supabase `blog_styles` 테이블에 저장합니다.
 2. **전문가 선택** — 맛집 🍽️ / 제품 📦 / 여행 ✈️ / 리빙 🏠 중에서 고릅니다. 각 전문가는 전용 어휘와 관점을 가집니다.
-3. **사진 분석** — 최대 25장을 5장씩 묶어 GPT-4o가 고품질(`detail: "high"`)로 분석합니다. 색감, 질감, 구도, 조명까지 읽습니다.
+3. **사진 분석** — 최대 25장을 5장씩 묶어 고품질(`detail: "high"`)로 분석합니다. 색감, 질감, 구도, 조명까지 읽습니다.
 4. **글 생성** — 주제·키워드·길이를 입력하면 학습한 문체 그대로 글을 씁니다. 사진이 들어갈 자리에 `[IMAGE_1]` 같은 마커가 자동으로 박힙니다.
 5. **다듬기** — "두 번째 문단을 더 자세히" 같이 대화로 부분 수정할 수 있습니다.
 6. **내보내기** — 클립보드 복사 또는 TXT 다운로드.
@@ -40,6 +40,11 @@ npm run dev                        # http://localhost:3000
 OPENAI_API_KEY=sk-proj-...
 AUTH_PASSWORD=<로그인 비밀번호>
 SESSION_SECRET=<32자 이상 랜덤 문자열>
+
+# 문체 저장소 - B와 반드시 같은 프로젝트를 가리켜야 합니다
+NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_...
+SUPABASE_SERVICE_ROLE_KEY=sb_secret_...
 
 # 선택 - 없으면 해당 기능만 비활성화됩니다
 OPENAI_ASSISTANT_ID=asst_...      # 문체를 Assistant instruction에 동기화
@@ -96,20 +101,20 @@ npm run dev                        # http://localhost:3001
 
 - **프레임워크** — Next.js 15 (App Router), React 19, TypeScript strict
 - **스타일** — Tailwind CSS 3
-- **AI** — OpenAI API (GPT-4o)
+- **AI** — OpenAI API (`gpt-5.6-sol` 본문·이미지, `gpt-5.6-terra` 보조)
 - **인증** — JWT (`jose`), HTTP-only 쿠키, 24시간 세션
 - **문서 생성** — `docx`
 - **자동화(B)** — Playwright
-- **저장소** — `data/blog-style.txt` 파일 / B의 대상 목록만 Supabase
+- **저장소** — Supabase (`blog_styles` 문체 / `neighbor_target_list` B의 대상 목록)
 
 ## 구조
 
 ```
 ├── app/                  # A: 페이지 + API 라우트
 ├── components/           # A: UI (expert / form / layout)
-├── lib/                  # A: openai, experts, search, place, utils
+├── lib/                  # A: openai, experts, search, place, supabase, utils
 ├── types/index.ts
-├── data/blog-style.txt   # A가 쓰고 B가 읽는 문체 파일
+├── supabase/migrations/  # 테이블 스키마 (A·B 공용)
 ├── middleware.ts         # JWT 경로 보호
 └── automation/           # B: 독립 프로젝트
 ```
@@ -118,7 +123,7 @@ npm run dev                        # http://localhost:3001
 
 `.vercelignore`가 `automation/`을 제외하므로 B는 배포되지 않습니다.
 
-Vercel 함수의 파일시스템은 읽기 전용이라, 배포된 앱에서 문체를 분석해도 파일에 저장되지 않습니다(해당 세션에서는 동작). **문체를 영구 반영하려면 로컬에서 분석 → `data/blog-style.txt` 커밋 → 재배포** 순서로 진행하세요. 빌드 시점에 이 파일이 없으면 배포 번들에도 포함되지 않습니다.
+Vercel 환경변수에 **Supabase 3종을 반드시 등록**하세요. 문체 저장소가 Supabase이므로 빠지면 `/format` 결과가 저장되지 않고 `/generate`가 문체를 읽지 못합니다. 등록 후에는 배포된 앱에서 `/format`을 한 번 실행하면 바로 반영되며, 따로 커밋할 파일은 없습니다.
 
 ## 보안
 

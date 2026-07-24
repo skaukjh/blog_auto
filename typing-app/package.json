@@ -1,0 +1,21 @@
+{
+  "name": "naver-blog-typer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "완성된 블로그 글을 네이버 글쓰기 화면에 사람처럼 순차 입력하는 데스크톱 프로그램",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node test-url.cjs",
+    "build": "electron-builder --win portable --config electron-builder.yml",
+    "build:folder": "electron-packager . \"네이버블로그순차입력기\" --platform=win32 --arch=x64 --out=dist --overwrite --app-version=1.0.0 --asar=false --ignore=\"^/(dist|test-.*\\.cjs)\""
+  },
+  "dependencies": {
+    "playwright-core": "^1.58.2"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.0.4",
+    "electron": "^34.0.0",
+    "electron-builder": "^26.15.3"
+  }
+}

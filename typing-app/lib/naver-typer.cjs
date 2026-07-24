@@ -1,0 +1,368 @@
+/**
+ * 네이버 블로그 순차 입력 엔진
+ *
+ * automation/lib/naver/post-writer.ts 와 같은 동작을 하지만, Electron 메인
+ * 프로세스에서 돌아가도록 CommonJS로 옮겼습니다. 두 프로젝트는 코드를
+ * 공유하지 않고 각자 사본을 가집니다 (저장소 규칙).
+ *
+ * 브라우저는 Playwright가 내려받은 Chromium이 아니라 **시스템에 설치된 크롬**을
+ * 씁니다(channel: 'chrome'). 그래야 exe에 300MB짜리 브라우저를 넣지 않아도 되고,
+ * 평소 쓰던 크롬이라 네이버 쪽에서도 덜 낯설게 봅니다.
+ */
+const { chromium } = require('playwright-core');
+
+/** 스마트에디터 ONE 본문 영역 식별 (앞에서부터 시도) */
+const EDITOR_ROOT_SELECTORS = ['.se-content', '.se-viewer', 'div[class*="se-container"]'];
+
+const TITLE_SELECTORS = [
+  '.se-documentTitle .se-text-paragraph',
+  '.se-documentTitle [contenteditable="true"]',
+  '.se-section-documentTitle .se-text-paragraph',
+  'div[class*="documentTitle"] [contenteditable="true"]',
+];
+
+const BODY_SELECTORS = [
+  '.se-component.se-text .se-text-paragraph',
+  '.se-section-text .se-text-paragraph',
+  '.se-content [contenteditable="true"]',
+  'div[class*="se-text"] [contenteditable="true"]',
+];
+
+function randomBetween(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+/**
+ * 글쓰기 화면 주소를 정합니다.
+ *
+ * 사용자가 URL을 넣었으면 그걸 우선하고, 비워 뒀으면 아이디로 만듭니다.
+ * 넣는 주소는 세 가지 형태를 모두 받습니다.
+ *   - 글쓰기 주소 그대로      https://blog.naver.com/아이디/postwrite
+ *   - 블로그 홈 주소          https://blog.naver.com/아이디
+ *   - 글 주소                 https://blog.naver.com/아이디/223456789
+ * 앞의 두세 경우 모두 /postwrite 로 바꿔 줍니다.
+ */
+function resolveWriteUrl(blogId, rawUrl) {
+  const input = (rawUrl ?? '').trim();
+  if (!input) return `https://blog.naver.com/${blogId}/postwrite`;
+
+  let url;
+  try {
+    url = new URL(input.startsWith('http') ? input : `https://${input}`);
+  } catch {
+    throw new Error(`글쓰기 주소를 이해할 수 없습니다: ${input}`);
+  }
+
+  if (!/(^|\.)naver\.com$/.test(url.hostname)) {
+    throw new Error('네이버 블로그 주소가 아닙니다. blog.naver.com 주소를 넣으세요.');
+  }
+
+  // PostWriteForm.naver?blogId=... 같은 구형 주소는 그대로 씁니다.
+  if (/postwriteform/i.test(url.pathname)) return url.toString();
+
+  const idFromPath = url.pathname.split('/').filter(Boolean)[0];
+  const id = idFromPath || url.searchParams.get('blogId') || blogId;
+
+  if (!id) throw new Error('주소에서 블로그 아이디를 찾지 못했습니다.');
+
+  return `https://blog.naver.com/${id}/postwrite`;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 본문을 문단 → 문장 단위로 쪼갭니다.
+ * 문단은 빈 줄 기준, 문장은 종결부호(. ! ?) 뒤에서 끊습니다.
+ */
+function splitIntoParagraphs(content) {
+  return content
+    .split(/\n\s*\n/)
+    .map((p) => p.replace(/\n/g, ' ').trim())
+    .filter((p) => p.length > 0)
+    .map((p) => {
+      const sentences = p.match(/[^.!?]+[.!?]*\s*/g);
+      return sentences ? sentences.filter((s) => s.trim().length > 0) : [p];
+    });
+}
+
+/** 에디터가 들어 있는 프레임을 찾습니다 (최상위 문서일 수도, iframe일 수도 있음) */
+async function findEditorFrame(page, log, timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    for (const frame of page.frames()) {
+      for (const selector of EDITOR_ROOT_SELECTORS) {
+        try {
+          if ((await frame.locator(selector).count()) > 0) {
+            log(`에디터를 찾았습니다 (${selector})`);
+            return frame;
+          }
+        } catch {
+          // 프레임 이동 중이면 실패합니다. 다음 후보로 넘어갑니다.
+        }
+      }
+    }
+    await sleep(500);
+  }
+
+  throw new Error('스마트에디터를 찾지 못했습니다. 글쓰기 화면이 열렸는지 확인하세요.');
+}
+
+/** 진입 시 뜨는 팝업들을 닫습니다. 없으면 정상이므로 실패해도 진행합니다 */
+async function dismissPopups(frame, log, warnings) {
+  const cancelSelectors = [
+    '.se-popup-button-cancel',
+    'button.se-popup-button-cancel',
+    '.se-popup-container button:has-text("취소")',
+  ];
+
+  for (const selector of cancelSelectors) {
+    try {
+      const button = frame.locator(selector).first();
+      if (await button.isVisible({ timeout: 2000 })) {
+        await button.click();
+        log('임시저장 복구 팝업을 닫았습니다 (새 글로 시작)');
+        warnings.push('임시저장된 글이 있어 "취소"를 눌러 새 글로 시작했습니다.');
+        await sleep(800);
+        break;
+      }
+    } catch {
+      // 팝업 없음 - 정상
+    }
+  }
+
+  for (const selector of ['.se-help-panel-close-button', 'button.se-utils-close', '.se-layer-close']) {
+    try {
+      const button = frame.locator(selector).first();
+      if (await button.isVisible({ timeout: 1000 })) {
+        await button.click();
+        await sleep(500);
+      }
+    } catch {
+      // 없음 - 정상
+    }
+  }
+}
+
+/** 후보 셀렉터 중 실제로 보이는 첫 요소를 반환 */
+async function findFirstVisible(frame, selectors, label, log, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    for (const selector of selectors) {
+      try {
+        const element = frame.locator(selector).first();
+        if (await element.isVisible({ timeout: 1000 })) {
+          log(`${label} 입력 영역 확인 (${selector})`);
+          return element;
+        }
+      } catch {
+        // 다음 후보로
+      }
+    }
+    await sleep(500);
+  }
+
+  throw new Error(`${label} 입력 영역을 찾지 못했습니다.`);
+}
+
+/** 문장 하나를 사람처럼 타이핑 */
+async function typeSentence(page, sentence, baseDelayMs) {
+  const delay = randomBetween(Math.round(baseDelayMs * 0.6), Math.round(baseDelayMs * 1.4));
+
+  if (sentence.length > 25) {
+    const breakPoint = randomBetween(10, sentence.length - 5);
+    await page.keyboard.type(sentence.slice(0, breakPoint), { delay });
+    await sleep(randomBetween(150, 500));
+    await page.keyboard.type(sentence.slice(breakPoint), { delay });
+  } else {
+    await page.keyboard.type(sentence, { delay });
+  }
+}
+
+/**
+ * 네이버에 로그인하고 글을 순차 입력합니다.
+ *
+ * @param {object}   options
+ * @param {function} options.onProgress 진행 상황 콜백 ({ type, message, percent })
+ * @param {function} options.shouldStop 중단 요청 여부를 돌려주는 함수
+ */
+async function typePost(options) {
+  const {
+    blogId,
+    blogPassword,
+    title,
+    content,
+    /** 글을 쓸 블로그 주소. 비우면 아이디로 만듭니다 */
+    writeUrl: rawWriteUrl = '',
+    charDelayMs = 55,
+    stripImageMarkers = false,
+    onProgress = () => {},
+    shouldStop = () => false,
+  } = options;
+
+  const log = (message, percent) => onProgress({ type: 'log', message, percent });
+  const warnings = [];
+  const startedAt = Date.now();
+  let browser = null;
+  let typedChars = 0;
+
+  const checkStop = () => {
+    if (shouldStop()) throw new Error('사용자가 중단했습니다.');
+  };
+
+  try {
+    if (!title.trim()) throw new Error('제목이 비어 있습니다.');
+    if (!content.trim()) throw new Error('본문이 비어 있습니다.');
+
+    // 주소는 브라우저를 띄우기 전에 검증합니다. 틀렸으면 창부터 뜨는 게 낭비입니다.
+    const writeUrl = resolveWriteUrl(blogId, rawWriteUrl);
+
+    let bodyText = content;
+    if (stripImageMarkers) {
+      bodyText = bodyText.replace(/\[IMAGE_\d+\]/g, '').replace(/[ \t]{2,}/g, ' ');
+    } else {
+      const markerCount = (content.match(/\[IMAGE_\d+\]/g) || []).length;
+      if (markerCount > 0) {
+        warnings.push(
+          `[IMAGE_N] 마커 ${markerCount}개를 그대로 입력했습니다. 발행 전에 사진을 넣고 마커를 지우세요.`
+        );
+      }
+    }
+
+    // 1) 시스템 크롬 실행
+    log('크롬을 실행합니다...', 2);
+    browser = await chromium.launch({
+      headless: false,
+      channel: 'chrome',
+      args: ['--disable-blink-features=AutomationControlled', '--disable-dev-shm-usage'],
+    });
+
+    const page = await browser.newPage();
+    page.setDefaultTimeout(60000);
+    page.setDefaultNavigationTimeout(60000);
+
+    // 2) 로그인
+    log('네이버 로그인 페이지로 이동합니다...', 5);
+    await page.goto('https://nid.naver.com/nidlogin.login', {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000,
+    });
+
+    log('아이디와 비밀번호를 입력합니다...', 8);
+    await page.locator('input[name="id"]').first().fill(blogId, { delay: 100 });
+    await sleep(500);
+    await page.locator('input[name="pw"]').first().fill(blogPassword, { delay: 100 });
+    await sleep(500);
+    await page.locator('button:has-text("로그인")').first().click();
+
+    log('로그인 처리 중입니다. 2차 인증이 뜨면 크롬 창에서 직접 완료하세요 (최대 2분)', 10);
+
+    let loginSuccess = false;
+    for (let i = 0; i < 120 && !loginSuccess; i++) {
+      checkStop();
+      try {
+        const url = page.url();
+        if (!url.includes('nid.naver.com/nidlogin.login')) {
+          loginSuccess = true;
+          break;
+        }
+      } catch {
+        // 페이지 이동 중
+      }
+      await sleep(1000);
+    }
+
+    if (!loginSuccess) {
+      throw new Error('로그인에 실패했습니다. 아이디·비밀번호 또는 2차 인증을 확인하세요.');
+    }
+
+    log('로그인 성공', 12);
+    await sleep(2000);
+
+    // 3) 글쓰기 화면 진입
+    checkStop();
+    log(`글쓰기 화면을 엽니다: ${writeUrl}`, 15);
+    await page.goto(writeUrl, {
+      waitUntil: 'domcontentloaded',
+      timeout: 60000,
+    });
+    await sleep(4000);
+
+    const frame = await findEditorFrame(page, log);
+    await dismissPopups(frame, log, warnings);
+
+    // 4) 제목 입력
+    checkStop();
+    log(`제목을 입력합니다 (${title.trim().length}자)`, 18);
+    const titleElement = await findFirstVisible(frame, TITLE_SELECTORS, '제목', log);
+    await titleElement.click();
+    await sleep(randomBetween(400, 900));
+    await typeSentence(page, title.trim(), charDelayMs);
+    typedChars += title.trim().length;
+    await sleep(randomBetween(800, 1600));
+
+    // 5) 본문 입력
+    const paragraphs = splitIntoParagraphs(bodyText);
+    const totalSentences = paragraphs.reduce((sum, p) => sum + p.length, 0);
+    log(`본문을 입력합니다 (문단 ${paragraphs.length}개 / 문장 ${totalSentences}개)`, 20);
+
+    const bodyElement = await findFirstVisible(frame, BODY_SELECTORS, '본문', log);
+    await bodyElement.click();
+    await sleep(randomBetween(500, 1200));
+
+    let doneSentences = 0;
+
+    for (let p = 0; p < paragraphs.length; p++) {
+      for (const sentence of paragraphs[p]) {
+        checkStop();
+        await typeSentence(page, sentence, charDelayMs);
+        typedChars += sentence.length;
+        doneSentences++;
+
+        // 20% ~ 98% 구간을 본문 진행률로 씁니다.
+        const percent = 20 + Math.round((doneSentences / totalSentences) * 78);
+        onProgress({
+          type: 'progress',
+          message: `${typedChars.toLocaleString()}자 입력 (문단 ${p + 1}/${paragraphs.length})`,
+          percent,
+        });
+
+        await sleep(randomBetween(250, 900));
+      }
+
+      if (p < paragraphs.length - 1) {
+        await page.keyboard.press('Enter');
+        await sleep(randomBetween(900, 2200));
+      }
+    }
+
+    warnings.push(
+      '자동 발행은 하지 않았습니다. 크롬 창에서 내용을 확인하고 직접 발행하세요.'
+    );
+
+    log('입력이 끝났습니다. 크롬 창에서 확인 후 발행하세요.', 100);
+
+    return {
+      success: true,
+      typedChars,
+      elapsedMs: Date.now() - startedAt,
+      warnings,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '알 수 없는 오류';
+    return {
+      success: false,
+      typedChars,
+      elapsedMs: Date.now() - startedAt,
+      warnings,
+      error: message,
+    };
+  }
+  // 브라우저는 일부러 닫지 않습니다.
+  // 사용자가 내용을 확인하고 직접 발행해야 하기 때문입니다.
+}
+
+module.exports = { typePost, splitIntoParagraphs, resolveWriteUrl };

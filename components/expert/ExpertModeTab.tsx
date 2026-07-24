@@ -31,6 +31,13 @@ interface ExpertModeTabProps {
   }) => void;
   isLoading?: boolean;
   disabled?: boolean;
+  /**
+   * 문체 학습이 끝난 전문가 목록. 조회 중이면 null.
+   *
+   * 전문가별로 문체가 따로 저장되므로, 학습된 전문가만 글을 쓸 수 있습니다.
+   * 하나가 학습됐다고 나머지까지 열리지 않습니다.
+   */
+  learnedExperts?: Set<string> | null;
   // 필수 입력 필드
   images: File[];
   onImagesChange: (images: File[]) => void; // ImageUpload는 onChange를 사용하지만 여기서는 onImagesChange로 래핑
@@ -47,6 +54,7 @@ export function ExpertModeTab({
   onGenerateWithExpert,
   isLoading = false,
   disabled = false,
+  learnedExperts = null,
   images,
   onImagesChange,
   topic,
@@ -203,7 +211,12 @@ export function ExpertModeTab({
     }
   }, [placeName]);
 
-  const canGenerate = selectedExpert && !disabled && !isLoading;
+  // 선택한 전문가의 문체가 학습돼 있어야 글을 쓸 수 있습니다.
+  // 다른 전문가가 학습됐는지는 여기에 영향을 주지 않습니다.
+  const selectedExpertLearned =
+    !selectedExpert || learnedExperts === null || learnedExperts.has(selectedExpert);
+
+  const canGenerate = selectedExpert && selectedExpertLearned && !disabled && !isLoading;
 
   return (
     <div className="space-y-6 bg-white rounded-lg border border-gray-200 p-6">
@@ -220,7 +233,23 @@ export function ExpertModeTab({
         selectedExpert={selectedExpert}
         onSelectExpert={setSelectedExpert}
         disabled={disabled || isLoading}
+        learnedExperts={learnedExperts}
       />
+
+      {/* 학습된 전문가가 하나도 없을 때만 안내 */}
+      {learnedExperts !== null && learnedExperts.size === 0 && (
+        <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
+          <p className="font-semibold text-yellow-900">
+            아직 문체를 학습한 전문가가 없습니다
+          </p>
+          <p className="text-sm text-yellow-800 mt-1">
+            <a href="/format" className="underline font-medium">
+              문체 학습 페이지
+            </a>
+            에서 전문가를 하나만 학습해도 그 전문가로는 바로 글을 쓸 수 있습니다.
+          </p>
+        </div>
+      )}
 
       {selectedExpert && (
         <>

@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>네이버 블로그 순차입력기</title>
+    <style>
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        padding: 24px;
+        font-family: "Malgun Gothic", "맑은 고딕", system-ui, sans-serif;
+        background: #f6f7f9;
+        color: #1f2328;
+        font-size: 14px;
+      }
+
+      h1 { margin: 0 0 4px; font-size: 21px; }
+      .sub { margin: 0 0 20px; color: #656d76; font-size: 13px; }
+
+      .card {
+        background: #fff;
+        border: 1px solid #d8dee4;
+        border-radius: 10px;
+        padding: 18px;
+        margin-bottom: 16px;
+      }
+
+      label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 13px; }
+
+      input[type="text"], input[type="password"], textarea, select {
+        width: 100%;
+        padding: 9px 11px;
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+        font-size: 13px;
+        font-family: inherit;
+        background: #fff;
+      }
+      textarea { resize: vertical; font-family: Consolas, monospace; line-height: 1.6; }
+      input:disabled, textarea:disabled, select:disabled { background: #f0f1f3; color: #8b949e; }
+
+      .row { display: flex; gap: 12px; }
+      .row > div { flex: 1; }
+      .field { margin-bottom: 14px; }
+      .field:last-child { margin-bottom: 0; }
+
+      .hint { color: #656d76; font-size: 12px; margin-top: 5px; }
+
+      button {
+        padding: 11px 20px;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      button:disabled { opacity: 0.45; cursor: not-allowed; }
+      .primary { background: #1f6feb; color: #fff; width: 100%; }
+      .danger { background: #d1242f; color: #fff; }
+
+      .notice {
+        background: #fff8e6;
+        border: 1px solid #f0d58c;
+        border-radius: 8px;
+        padding: 12px 14px;
+        font-size: 13px;
+        margin-bottom: 16px;
+        line-height: 1.65;
+      }
+
+      .bar-wrap { height: 8px; background: #e6e8eb; border-radius: 4px; overflow: hidden; }
+      .bar { height: 100%; width: 0; background: #1f6feb; transition: width 0.3s; }
+
+      #log {
+        margin-top: 12px;
+        max-height: 190px;
+        overflow-y: auto;
+        background: #0d1117;
+        color: #c9d1d9;
+        border-radius: 6px;
+        padding: 11px 13px;
+        font-family: Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.75;
+        white-space: pre-wrap;
+      }
+
+      .result { border-radius: 8px; padding: 14px; font-size: 13px; line-height: 1.7; }
+      .ok { background: #e8f5ec; border: 1px solid #a7d8b6; }
+      .fail { background: #ffeef0; border: 1px solid #f0b3b8; }
+      .hidden { display: none; }
+      .checkline { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 9px; }
+      .checkline input { margin-top: 3px; }
+      .checkline span { font-size: 13px; line-height: 1.55; }
+    </style>
+  </head>
+  <body>
+    <h1>네이버 블로그 순차입력기</h1>
+    <p class="sub">완성된 글을 붙여넣지 않고 사람이 타이핑하듯 한 글자씩 입력합니다</p>
+
+    <div class="notice">
+      <strong>크롬 창이 뜨면 건드리지 마세요.</strong> 입력 중 마우스나 키보드를 쓰면 위치가
+      어긋납니다. 2차 인증 화면이 뜨면 그때만 직접 처리하세요 (최대 2분 대기).<br />
+      <strong>자동 발행은 하지 않습니다.</strong> 입력이 끝나면 크롬 창이 열린 채로 남으니,
+      사진을 넣고 검토한 뒤 직접 발행하세요.
+    </div>
+
+    <div class="card">
+      <div class="row field">
+        <div>
+          <label for="blogId">네이버 아이디</label>
+          <input type="text" id="blogId" placeholder="아이디" autocomplete="off" />
+        </div>
+        <div>
+          <label for="blogPassword">비밀번호</label>
+          <input type="password" id="blogPassword" placeholder="비밀번호" autocomplete="off" />
+        </div>
+      </div>
+      <p class="hint">계정 정보는 저장하지 않습니다. 창을 닫으면 사라집니다.</p>
+
+      <div class="field" style="margin-top: 14px">
+        <label for="writeUrl">글쓰기 주소 <span style="font-weight: 400; color: #656d76">(선택)</span></label>
+        <input type="text" id="writeUrl" placeholder="https://blog.naver.com/아이디/postwrite" />
+        <p class="hint">
+          비워 두면 위 아이디로 자동 구성합니다. 블로그가 여러 개면 여기에 주소를 넣으세요.<br />
+          블로그 홈 주소(<code>blog.naver.com/아이디</code>)나 글 주소를 넣어도 글쓰기 화면으로
+          바꿔서 엽니다.
+        </p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="field">
+        <label for="title">제목</label>
+        <input type="text" id="title" placeholder="글 제목" />
+      </div>
+
+      <div class="field">
+        <label for="content">본문 <span id="charCount" style="font-weight: 400; color: #656d76"></span></label>
+        <textarea id="content" rows="13" placeholder="글 생성기에서 받은 본문을 붙여넣으세요. 빈 줄로 문단을 나눕니다."></textarea>
+      </div>
+
+      <div class="row field">
+        <div>
+          <label for="speed">입력 속도</label>
+          <select id="speed">
+            <option value="90">느리게 (가장 자연스러움)</option>
+            <option value="55" selected>보통 (권장)</option>
+            <option value="30">빠르게</option>
+          </select>
+        </div>
+        <div>
+          <label>예상 소요 시간</label>
+          <input type="text" id="estimate" value="-" disabled />
+        </div>
+      </div>
+
+      <div class="checkline">
+        <input type="checkbox" id="stripMarkers" />
+        <span
+          ><strong>[IMAGE_N] 마커 제거</strong> — 체크하면 마커를 빼고 입력합니다. 체크하지
+          않으면 사진 넣을 위치 표시로 그대로 남습니다.</span
+        >
+      </div>
+    </div>
+
+    <div class="card">
+      <button class="primary" id="startBtn">순차 입력 시작</button>
+      <button class="danger hidden" id="stopBtn" style="width: 100%">중단</button>
+
+      <div id="progressArea" class="hidden" style="margin-top: 16px">
+        <div class="bar-wrap"><div class="bar" id="bar"></div></div>
+        <div id="log"></div>
+      </div>
+
+      <div id="result" class="result hidden" style="margin-top: 16px"></div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const inputs = ['blogId', 'blogPassword', 'writeUrl', 'title', 'content', 'speed', 'stripMarkers'];
+
+      function updateEstimate() {
+        const chars = $('title').value.length + $('content').value.length;
+        $('charCount').textContent = chars ? `(${$('content').value.length.toLocaleString()}자)` : '';
+
+        if (!chars) {
+          $('estimate').value = '-';
+          return;
+        }
+
+        const delay = Number($('speed').value);
+        const body = $('content').value;
+        const sentences = (body.match(/[.!?]/g) || []).length;
+        const paragraphs = body.split(/\n\s*\n/).length - 1;
+        const ms = chars * delay + sentences * 575 + paragraphs * 1550;
+        $('estimate').value = `약 ${Math.max(1, Math.round(ms / 60000))}분`;
+      }
+
+      ['title', 'content', 'speed'].forEach((id) =>
+        $(id).addEventListener('input', updateEstimate)
+      );
+      $('speed').addEventListener('change', updateEstimate);
+
+      function appendLog(message) {
+        const el = $('log');
+        const time = new Date().toLocaleTimeString('ko-KR');
+        el.textContent += `[${time}] ${message}\n`;
+        el.scrollTop = el.scrollHeight;
+      }
+
+      function setBusy(busy) {
+        inputs.forEach((id) => ($(id).disabled = busy));
+        $('startBtn').classList.toggle('hidden', busy);
+        $('stopBtn').classList.toggle('hidden', !busy);
+      }
+
+      window.typer.onProgress(({ type, message, percent }) => {
+        if (typeof percent === 'number') $('bar').style.width = `${percent}%`;
+        // 진행률은 초당 여러 번 오므로 로그에는 단계 메시지만 남깁니다.
+        if (type === 'log') appendLog(message);
+        else if (type === 'progress') $('estimate').value = message;
+      });
+
+      $('startBtn').addEventListener('click', async () => {
+        const blogId = $('blogId').value.trim();
+        const blogPassword = $('blogPassword').value;
+        const title = $('title').value.trim();
+        const content = $('content').value;
+
+        if (!blogId || !blogPassword) return alert('아이디와 비밀번호를 입력하세요.');
+        if (!title) return alert('제목을 입력하세요.');
+        if (!content.trim()) return alert('본문을 입력하세요.');
+
+        $('result').classList.add('hidden');
+        $('progressArea').classList.remove('hidden');
+        $('log').textContent = '';
+        $('bar').style.width = '0%';
+        setBusy(true);
+
+        const result = await window.typer.start({
+          blogId,
+          blogPassword,
+          writeUrl: $('writeUrl').value.trim(),
+          title,
+          content,
+          charDelayMs: Number($('speed').value),
+          stripImageMarkers: $('stripMarkers').checked,
+        });
+
+        setBusy(false);
+        $('blogPassword').value = '';
+
+        const box = $('result');
+        box.classList.remove('hidden', 'ok', 'fail');
+        box.classList.add(result.success ? 'ok' : 'fail');
+
+        const seconds = Math.round((result.elapsedMs || 0) / 1000);
+        const warnings = (result.warnings || []).map((w) => `<li>${w}</li>`).join('');
+
+        box.innerHTML = result.success
+          ? `<strong>입력 완료</strong><br />${(result.typedChars || 0).toLocaleString()}자 · ${seconds}초 소요
+             ${warnings ? `<ul style="margin:8px 0 0;padding-left:20px">${warnings}</ul>` : ''}`
+          : `<strong>입력 실패</strong><br />${result.error || '알 수 없는 오류'}
+             ${warnings ? `<ul style="margin:8px 0 0;padding-left:20px">${warnings}</ul>` : ''}`;
+
+        updateEstimate();
+      });
+
+      $('stopBtn').addEventListener('click', async () => {
+        if (!confirm('입력을 중단할까요?\n지금까지 입력된 내용은 크롬 창에 남습니다.')) return;
+        await window.typer.stop();
+        appendLog('중단을 요청했습니다. 현재 문장까지 마치고 멈춥니다...');
+      });
+
+      updateEstimate();
+    </script>
+  </body>
+</html>

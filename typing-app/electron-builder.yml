@@ -1,0 +1,18 @@
+appId: com.skaukjh.naverblogtyper
+productName: 네이버블로그순차입력기
+directories:
+  output: dist-single
+files:
+  - electron/**/*
+  - renderer/**/*
+  - lib/**/*
+  - package.json
+  - node_modules/playwright-core/**/*
+asarUnpack:
+  - node_modules/playwright-core/**/*
+win:
+  target: portable
+  # rcedit/서명을 끄면 winCodeSign 압축 해제(심볼릭 링크 필요)를 건너뛸 수 있는지 시험
+  signAndEditExecutable: false
+portable:
+  artifactName: 네이버블로그순차입력기.exe

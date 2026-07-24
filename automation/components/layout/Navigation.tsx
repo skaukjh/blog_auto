@@ -8,6 +8,7 @@ const TABS = [
   { path: '/', emoji: '👍', label: '홈 일괄 좋아요' },
   { path: '/comment-and-like', emoji: '💬', label: '댓글+좋아요' },
   { path: '/add-buddy', emoji: '🤝', label: '서로이웃 추가' },
+  { path: '/write-post', emoji: '✍️', label: '글쓰기 순차 입력' },
 ];
 
 export default function Navigation() {

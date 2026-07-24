@@ -222,6 +222,37 @@ Output ONLY the modified blog post content. No explanations.`;
 }
 
 /**
+ * 종결어미 규칙을 정합니다.
+ *
+ * 우선순위:
+ *   1) forcedEnding — 글쓰기 가이드가 종결어미를 지배하도록 설정된 경우(사용자 결정 2026-07-24).
+ *      학습된 전문가 문체의 어미보다 이 값이 우선합니다.
+ *   2) 학습 문체 가이드의 "uses ~~다 endings" 문구
+ *   3) 기본값 ~~요
+ *
+ * @param styleGuide  학습된 전문가 문체 가이드
+ * @param forcedEnding 가이드가 강제하는 종결어미('요'|'다'). 있으면 학습 문체를 무시합니다.
+ */
+function resolveEndingRule(
+  styleGuide?: string,
+  forcedEnding?: "요" | "다" | null
+): string {
+  const usePlain = forcedEnding
+    ? forcedEnding === "다"
+    : /uses\s*~*\s*다\s*endings/i.test(styleGuide ?? "");
+
+  if (usePlain) {
+    return `ALL sentences MUST end with the ~~다 pattern.
+Examples: 좋았다, 추천한다, 방문했다
+NEVER use: ~~요, ~~해요, ~~네요`;
+  }
+
+  return `ALL sentences MUST end with the ~~요 pattern.
+Examples: 좋았어요, 추천해요, 방문했어요
+NEVER use: ~~다, ~~한다, ~~했다`;
+}
+
+/**
  * Phase 20: 전문가 기반 블로그 콘텐츠 생성
  * 웹 검색 결과와 추천 정보를 통합합니다
  */
@@ -236,7 +267,26 @@ export async function generateBlogContentExpert(
   recommendations?: RecommendationItem[],
   startSentence?: string,
   endSentence?: string,
-  placeInfo?: PlaceInfo
+  placeInfo?: PlaceInfo,
+  /**
+   * /format 에서 학습한 이 전문가의 문체 가이드.
+   * 없으면 전문가 페르소나의 기본 톤만으로 생성합니다.
+   */
+  styleGuide?: string | null,
+  /**
+   * 참고 자료(전자책·프롬프트 자료집)를 분석해 둔 글 구조 가이드.
+   *
+   * 문체(styleGuide)와 역할이 다릅니다. 이쪽은 "어떤 구조로 쓰는가"를 담습니다.
+   * 없으면 구조 지시 없이 생성합니다.
+   */
+  writingGuide?: string | null,
+  /**
+   * 글쓰기 가이드가 강제하는 종결어미('요'|'다').
+   *
+   * 사용자 결정(2026-07-24): 이 값이 있으면 **학습된 전문가 문체의 어미를 무시하고**
+   * 모든 글을 이 어미로 씁니다. null이면 학습 문체를 따릅니다.
+   */
+  forcedEnding?: "요" | "다" | null
 ): Promise<GeneratedContentWithImages> {
   try {
     const expertPrompt = getExpertPrompt(expertType);
@@ -360,13 +410,31 @@ ${recommendationsSection}`;
 ${placeInfoText}`;
     }
 
+    // 학습된 문체가 있으면 프롬프트에 싣고, 종결어미도 거기서 끌어옵니다.
+    const trimmedGuide = styleGuide?.trim();
+    if (trimmedGuide) {
+      userPrompt += `\n\n⚠️ LEARNED WRITING STYLE (analyzed from this author's own ${expertType} posts):
+${trimmedGuide}
+
+CRITICAL: This style guide describes HOW this author writes. Reproduce these habits -
+sentence endings, rhythm, paragraph shape, transitions, and closing style.
+It intentionally contains no subject matter; take only the technique from it.`;
+    }
+
+    const endingRule = resolveEndingRule(trimmedGuide, forcedEnding);
+
+    // 가이드가 종결어미를 지배하면, 학습 문체 안내에 딸려온 반대 어미 지시를 무효화합니다.
+    const forcedEndingNote = forcedEnding
+      ? `\nNOTE: The reference guide dictates the ~~${forcedEnding} ending for ALL posts.
+If the learned style above mentions a different ending, IGNORE that part and use ~~${forcedEnding}.
+Still borrow the learned style's vocabulary, rhythm, and paragraph shape.`
+      : "";
+
     userPrompt += `\n\nCRITICAL REQUIREMENTS (IN PRIORITY ORDER):
 
 PRIORITY 1 - SENTENCE ENDINGS (MANDATORY):
-CRITICAL: ALL sentences MUST end with ~~요 pattern.
-Examples: 맛있어요, 좋았어요, 추천해요
-NEVER use: ~~다, ~~한다, ~~했다
-100% consistency required.
+${endingRule}${forcedEndingNote}
+100% consistency required - never mix ending styles within the post.
 
 PRIORITY 2 - IMAGE-BASED DESCRIPTIONS:
 - Describe ONLY what is ACTUALLY VISIBLE in the provided images
@@ -398,6 +466,20 @@ PRIORITY 5 - QUALITY & ENGAGEMENT:
 - Include sensory details and practical tips
 - Make it engaging and valuable for readers`;
 
+    // 참고 자료에서 뽑아 둔 구조 가이드.
+    const trimmedWritingGuide = writingGuide?.trim();
+    if (trimmedWritingGuide) {
+      userPrompt += `\n\nPRIORITY 6 - POST STRUCTURE (from the author's reference material):
+${trimmedWritingGuide}
+
+HOW TO APPLY THIS SECTION:
+- These are STRUCTURAL rules: skeleton, paragraph shape, what facts to include, how to close.
+- The sentence ending is fixed by PRIORITY 1 above. If this section's tone hints at a different
+  ending, follow PRIORITY 1 for endings and take only the structure from here.
+- Do not invent facts to satisfy a structural rule. If a required detail (price, distance,
+  time) is not present in the provided images or supplied data, omit it rather than guess.`;
+    }
+
     userPrompt += creativityDirective;
 
     const response = await openai.chat.completions.create(
@@ -406,7 +488,14 @@ PRIORITY 5 - QUALITY & ENGAGEMENT:
         messages: [
           {
             role: "system",
-            content: expertPrompt.contentGenerationSystemPrompt,
+            content: trimmedGuide
+              ? `${expertPrompt.contentGenerationSystemPrompt}
+
+⚠️ STYLE OVERRIDE: The user supplied a learned style guide in the user message.
+Where this persona's default tone conflicts with that guide, THE GUIDE WINS -
+especially for sentence endings. The persona governs domain expertise and what to
+notice; the guide governs how the sentences sound.`
+              : expertPrompt.contentGenerationSystemPrompt,
           },
           {
             role: "user",

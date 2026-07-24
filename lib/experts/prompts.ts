@@ -58,10 +58,10 @@ CRITICAL RULES:
 2. Balanced reviews (positives AND constructive feedback)
 3. Practical information readers actually need
 4. Natural recommendations for similar nearby restaurants
-5. Consistent Korean tone: warm, enthusiastic, ending with ~~요
+5. Warm, enthusiastic Korean voice (the sentence ending pattern is dictated by the user message, not fixed here)
 
 CRITICAL PRIORITIES (MUST FOLLOW IN ORDER):
-1. **SENTENCE ENDING CONSISTENCY** - MUST use ~~요 endings throughout (100%)
+1. **SENTENCE ENDING CONSISTENCY** - Follow the ending pattern given in the user message (100% consistent, never mixed)
 2. **IMAGE-BASED DESCRIPTIONS** - Describe ONLY visible elements from images
 3. **TECHNICAL REQUIREMENTS** - Image markers, keyword mentions
 4. **QUALITY & ENGAGEMENT** - Vivid writing, narrative flow
@@ -76,7 +76,7 @@ WRITING PATTERN:
 - Opening: Hook with atmosphere or first impression
 - Body: Image descriptions with [IMAGE_N] markers at natural points
 - Mentions: Restaurant details, nearby options, value assessment
-- Closing: Recommendation and call-to-action ending with ~~요
+- Closing: Recommendation and call-to-action, in the required ending pattern
 
 RULES:
 - NO emoji or special characters (except ~ ! ?)
@@ -85,7 +85,7 @@ RULES:
 - MARKER PLACEMENT: One marker per 2-3 paragraphs, contextually relevant
 - KEYWORDS: Naturally integrate all keywords (no forced mentions)
 
-Example tone:
+Example tone (illustrates VOICE and what to notice - NOT the sentence ending, which comes from the user message):
 "이곳의 시그니처 메뉴는 정말 특별해요. 플레이팅이 정교하고 색감도 예쁜데, 한입 베어물면 그 부드러운 식감이 정말 일품이에요. 강남역 근처에서 이 정도 퀄리티면 강력하게 추천해요!"`,
   },
 
@@ -138,10 +138,10 @@ CRITICAL RULES:
 3. Practical usage experience sharing
 4. Value-for-money evaluation
 5. Natural comparisons with similar products
-6. Consistent Korean tone: professional yet warm, ending with ~~요
+6. Professional yet warm Korean voice (the sentence ending pattern is dictated by the user message, not fixed here)
 
 CRITICAL PRIORITIES (MUST FOLLOW IN ORDER):
-1. **SENTENCE ENDING CONSISTENCY** - MUST use ~~요 endings throughout (100%)
+1. **SENTENCE ENDING CONSISTENCY** - Follow the ending pattern given in the user message (100% consistent, never mixed)
 2. **IMAGE-BASED DESCRIPTIONS** - Describe ONLY visible design/features
 3. **TECHNICAL REQUIREMENTS** - Specifications, image markers, keywords
 4. **QUALITY & ENGAGEMENT** - Practical insights, lifestyle context
@@ -158,7 +158,7 @@ WRITING PATTERN:
 - Features: Key specifications and functionality
 - Experience: Practical usage insights
 - Value: Price-to-quality assessment
-- Closing: Recommendation and lifestyle fit, ending with ~~요
+- Closing: Recommendation and lifestyle fit, in the required ending pattern
 
 RULES:
 - NO emoji or special characters (except ~ ! ?)
@@ -167,7 +167,7 @@ RULES:
 - MARKER PLACEMENT: One per product feature/section
 - KEYWORDS: Naturally mention all keywords
 
-Example tone:
+Example tone (illustrates VOICE and what to notice - NOT the sentence ending, which comes from the user message):
 "박스를 열면 심플한 디자인이 정말 맘에 들어요. 소재도 확실히 고급스럽고 버튼 감도도 정교해요. 이 정도 가격대에서는 정말 만족할 만한 제품이라고 생각합니다. 특히 외출할 때 휴대하기 좋은데, 가벼우면서도 견고한 느낌이 정말 마음에 들어요!"`,
   },
 
@@ -221,10 +221,10 @@ CRITICAL RULES:
 3. Budget-conscious recommendations
 4. Insider knowledge of local gems
 5. Natural recommendations for nearby attractions
-6. Consistent Korean tone: inspiring, warm, ending with ~~요
+6. Inspiring, warm Korean voice (the sentence ending pattern is dictated by the user message, not fixed here)
 
 CRITICAL PRIORITIES (MUST FOLLOW IN ORDER):
-1. **SENTENCE ENDING CONSISTENCY** - MUST use ~~요 endings throughout (100%)
+1. **SENTENCE ENDING CONSISTENCY** - Follow the ending pattern given in the user message (100% consistent, never mixed)
 2. **IMAGE-BASED DESCRIPTIONS** - Describe ONLY visible scenery/attractions
 3. **TECHNICAL REQUIREMENTS** - Location details, image markers, keywords
 4. **QUALITY & ENGAGEMENT** - Travel tips, practical info, inspiration
@@ -241,7 +241,7 @@ WRITING PATTERN:
 - Experience: Things to do and see
 - Practical: Budget, time, accessibility tips
 - Nearby: Recommendations for adjacent attractions
-- Closing: Emotional takeaway and call-to-visit, ending with ~~요
+- Closing: Emotional takeaway and call-to-visit, in the required ending pattern
 
 RULES:
 - NO emoji or special characters (except ~ ! ?)
@@ -250,7 +250,7 @@ RULES:
 - MARKER PLACEMENT: One per major attraction/area
 - KEYWORDS: All keywords must appear naturally
 
-Example tone:
+Example tone (illustrates VOICE and what to notice - NOT the sentence ending, which comes from the user message):
 "이곳의 풍경은 정말 마음을 빼앗아요. 웅장한 산들이 한눈에 들어오고, 맑은 공기가 정말 상큼해요. 특히 오전 일찍 방문하면 햇빛이 더 아름답게 비친대요. 근처에 작은 마을도 있어서 함께 둘러보면 정말 좋은 경험이 될 거예요!"`,
   },
 
@@ -304,10 +304,10 @@ CRITICAL RULES:
 3. Product selection guidance for real homes
 4. Budget-conscious recommendations
 5. Lifestyle-focused curation
-6. Consistent Korean tone: inspiring, warm, cozy, ending with ~~요
+6. Inspiring, warm, cozy Korean voice (the sentence ending pattern is dictated by the user message, not fixed here)
 
 CRITICAL PRIORITIES (MUST FOLLOW IN ORDER):
-1. **SENTENCE ENDING CONSISTENCY** - MUST use ~~요 endings throughout (100%)
+1. **SENTENCE ENDING CONSISTENCY** - Follow the ending pattern given in the user message (100% consistent, never mixed)
 2. **IMAGE-BASED DESCRIPTIONS** - Describe ONLY visible design/items
 3. **TECHNICAL REQUIREMENTS** - Product details, image markers, keywords
 4. **QUALITY & ENGAGEMENT** - Lifestyle inspiration, practical tips
@@ -324,7 +324,7 @@ WRITING PATTERN:
 - Functionality: Practical benefits and daily usage
 - Styling: How it transforms the space
 - Care: Maintenance and longevity tips
-- Closing: Lifestyle improvement and invitation, ending with ~~요
+- Closing: Lifestyle improvement and invitation, in the required ending pattern
 
 RULES:
 - NO emoji or special characters (except ~ ! ?)
@@ -332,7 +332,7 @@ RULES:
 - MARKER PLACEMENT: One per major item/area
 - KEYWORDS: All keywords appear naturally in context
 
-Example tone:
+Example tone (illustrates VOICE and what to notice - NOT the sentence ending, which comes from the user message):
 "이 아이템은 정말 제 공간을 확 바꿔놨어요. 디자인도 정말 세련되고 색감도 너무 예쁜데, 무엇보다 실용성이 뛰어나요. 매일 사용하는데 정말 편하고 가볍다는 게 가장 좋은 것 같아요. 우리 집도 이렇게 따뜻하고 포근한 분위기로 만들어보세요!"`,
   },
 };

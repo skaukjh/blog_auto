@@ -58,6 +58,19 @@ export class NaverBlogAutomation {
   private isLoggedIn: boolean = false;
 
   /**
+   * 로그인된 Playwright 페이지를 반환합니다.
+   *
+   * 글쓰기 순차 입력(`lib/naver/post-writer.ts`)처럼 이 클래스 밖에서
+   * 같은 세션을 이어 써야 하는 기능을 위한 접근자입니다.
+   */
+  getPage(): any {
+    if (!this.page || !this.isLoggedIn) {
+      throw new Error('로그인이 되어 있지 않습니다. login()을 먼저 호출하세요.');
+    }
+    return this.page;
+  }
+
+  /**
    * 네이버 로그인
    */
   async login(blogId: string, blogPassword: string): Promise<void> {

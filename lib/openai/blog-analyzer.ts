@@ -1,6 +1,16 @@
 import { openai, DEFAULT_MODEL, buildChatParams } from "./client";
 import { BLOG_STYLE_ANALYSIS_PROMPT } from "./prompts";
-import type { BlogPost, BlogStyle } from "@/types/index";
+import { EXPERTS } from "@/lib/experts/definitions";
+import type { BlogPost, BlogStyle, StyleScope } from "@/types/index";
+
+/**
+ * 문체 분석에 필요한 최소 예시글 개수.
+ *
+ * 상한은 없습니다. 넣는 만큼 전부 분석에 들어갑니다.
+ * 다만 예시글 전체가 한 번의 요청으로 모델에 들어가므로, 지나치게 많이 넣으면
+ * 컨텍스트 한도에 걸려 OpenAI 쪽에서 오류가 날 수 있습니다.
+ */
+export const MIN_STYLE_SAMPLES = 2;
 
 /**
  * 블로그 글들을 분석하여 스타일을 추출합니다
@@ -70,89 +80,133 @@ export async function analyzeBlogStyle(posts: BlogPost[]): Promise<BlogStyle> {
 }
 
 /**
- * 간략한 영문 스타일을 생성합니다 (더 상세하고 정확한 분석)
- * GPT-4o를 사용하여 더 높은 품질의 분석 제공
+ * 예시글에서 실제로 쓰인 종결어미를 세어 우세한 패턴을 판정합니다.
+ *
+ * LLM 판단에만 맡기면 표본과 다른 패턴을 적어내는 일이 있어, 코드로 먼저 세고
+ * 그 결과를 프롬프트에 확정값으로 넣습니다.
  */
-export async function analyzeStyleCompact(posts: BlogPost[]): Promise<string> {
+export function detectSentenceEnding(posts: BlogPost[]): {
+  pattern: "요" | "다";
+  politeCount: number;
+  plainCount: number;
+  confidence: number;
+} {
+  const text = posts.map((p) => p.excerpt).join("\n");
+
+  // 문장 끝(마침표/물음표/느낌표/줄바꿈/문자열 끝) 직전의 어미만 셉니다.
+  const boundary = "(?=\\s*(?:[.!?…]|\\n|$))";
+  const politeMatches = text.match(new RegExp(`(?:요|죠|네요|어요|아요|세요)${boundary}`, "g"));
+  const plainMatches = text.match(new RegExp(`(?:다|까|군|구나)${boundary}`, "g"));
+
+  const politeCount = politeMatches?.length ?? 0;
+  const plainCount = plainMatches?.length ?? 0;
+  const total = politeCount + plainCount;
+
+  return {
+    pattern: politeCount >= plainCount ? "요" : "다",
+    politeCount,
+    plainCount,
+    confidence: total === 0 ? 0 : Math.max(politeCount, plainCount) / total,
+  };
+}
+
+/**
+ * 전문가별 문체 가이드를 생성합니다.
+ *
+ * 예시글을 받아 "어떻게 쓰는가"(HOW)만 뽑아냅니다. 주제·소재(WHAT)는
+ * 의도적으로 제외해, 같은 문체를 다른 소재의 글에도 적용할 수 있게 합니다.
+ *
+ * @param posts 예시글 (최소 2개, 상한 없음 - 넣은 만큼 전부 분석합니다)
+ * @param scope 전문가 구분. 해당 전문가 글의 관습을 함께 고려합니다
+ */
+export async function analyzeStyleCompact(
+  posts: BlogPost[],
+  scope: StyleScope = "common"
+): Promise<string> {
   try {
-    if (posts.length < 2) {
-      throw new Error("최소 2개의 글이 필요합니다");
+    if (posts.length < MIN_STYLE_SAMPLES) {
+      throw new Error(`최소 ${MIN_STYLE_SAMPLES}개의 글이 필요합니다`);
     }
 
-    // 글 내용 준비 (전체 내용 사용 - 더 정확한 분석)
-    const postsContent = posts
-      .slice(0, 2)
-      .map((post, index) => {
-        return `Post ${index + 1}: ${post.title}\nContent:\n${post.excerpt}`;
-      })
+    // 상한 없이 받은 예시글을 전부 씁니다.
+    const samples = posts;
+
+    const postsContent = samples
+      .map((post, index) => `Post ${index + 1}: ${post.title}\nContent:\n${post.excerpt}`)
       .join("\n\n---\n\n");
 
-    const prompt = `You are a professional writing style analyzer. Analyze these 2 blog posts and extract ONLY the GENERAL writing style guide - the HOW, not the WHAT.
+    // 전문가별 맥락. 'common'이면 특정 분야를 전제하지 않습니다.
+    const expert = scope !== "common" ? EXPERTS[scope] : null;
+    const domainContext = expert
+      ? `These posts come from a Korean "${expert.name}" blog (${expert.description}).
+Typical subject matter: ${expert.expertise.join(", ")}.
+Keep this genre in mind when describing conventions, but the guide itself must stay topic-agnostic.`
+      : `These posts come from a general Korean blog. Do not assume any particular genre.`;
+
+    // 코드로 먼저 세어 확정한 종결어미를 프롬프트에 못 박습니다.
+    const ending = detectSentenceEnding(samples);
+    const endingLabel = ending.pattern === "요" ? "~~요 (polite)" : "~~다 (plain/declarative)";
+
+    const prompt = `You are a professional writing style analyzer. Analyze these ${samples.length} Korean blog posts and extract ONLY the GENERAL writing style guide - the HOW, not the WHAT.
 
 ${postsContent}
 
-CRITICAL INSTRUCTION: This analysis is for a restaurant food blog. Extract ONLY generic writing techniques that apply to ANY topic, NOT food-specific content.
+CONTEXT:
+${domainContext}
+
+MEASURED SENTENCE ENDING (computed from the samples, treat as ground truth):
+- Dominant pattern: ${endingLabel}
+- Counts: polite(요) ${ending.politeCount} vs plain(다) ${ending.plainCount}
+- You MUST report this exact pattern in section 1. Do NOT substitute your own judgement.
 
 Create a style guide in PLAIN TEXT covering:
 
 1. SENTENCE ENDING PATTERN (MOST IMPORTANT):
-   - Identify the primary sentence ending style (종결어미)
-   - Look at how sentences end: ~~요, ~~다, ~~해요, ~~하다, etc.
-   - Analyze at least 10 sentences to identify consistent pattern
-   - State clearly: "Primary ending style: uses ~~요 endings" OR "Primary ending style: uses ~~다 endings"
-   - Include 2-3 example patterns if mixed but with clear primary
-   - THIS IS THE MOST CRITICAL ASPECT - place it FIRST
+   - State exactly: "Primary ending style: uses ${ending.pattern === "요" ? "~~요" : "~~다"} endings"
+   - List 3-5 concrete ending forms observed in the samples
+   - Note any secondary pattern and roughly how often it appears
+   - THIS IS THE MOST CRITICAL SECTION - place it FIRST
 
 2. TONE & VOICE:
    - Overall tone (casual, professional, warm, friendly, educational)
-   - Emotional expression method
-   - Reader engagement approach
+   - How emotion is expressed
+   - How the reader is addressed and engaged
 
 3. WRITING PATTERN:
-   - Sentence length (short/medium/long)
+   - Typical sentence length (short/medium/long)
    - Sentence structure (simple/complex/varied)
-   - Paragraph size and organization
+   - Paragraph size and how paragraphs are organized
 
 4. GENERIC EXPRESSIONS & CONNECTORS:
-   - Recommendation phrases (make them GENERIC, e.g., "highly recommend" not "must try this dish")
+   - Recommendation phrasing, stated generically
    - Transition phrases between ideas
-   - Satisfaction expressions (GENERIC only: "great experience" not "delicious food")
-   - Approval phrases (GENERIC: "wonderful" not "amazing pasta")
-   - DO NOT mention: 등갈비, 고기, 메뉴, 음식, 요리, 맛있어, 맛 - replace with generic equivalents
+   - Satisfaction and approval phrasing, stated generically
+   - Describe the SHAPE of the phrase, never the subject matter
 
 5. NARRATIVE STRUCTURE:
    - Opening style
    - Flow from start to end
-   - Closing/CTA style
+   - Closing / call-to-action style
 
 6. EMPHASIS TECHNIQUES:
-   - How emphasis is created (repetition, exclamation, etc.)
-   - Descriptive language style
+   - How emphasis is created (repetition, exclamation, spacing, etc.)
+   - Descriptive language habits
    - Punctuation patterns
 
 7. READER INTERACTION:
-   - Question types
-   - Recommendation format
+   - Question types used
+   - How recommendations are framed
    - Call-to-action patterns
 
-OVERRIDE RULE - ALWAYS FORCE ~~요 ENDINGS:
-- Regardless of what the sample posts use (~~다, ~~해, etc.)
-- ALWAYS convert and describe the ending pattern as "uses ~~요 endings"
-- Examples: 맛있어요, 좋았어요, 추천해요, 방문해보세요, 느꼈어요
-- This is a MANDATORY requirement from the user
-- DO NOT preserve ~~다 or any other ending style from samples
-
 ABSOLUTE RULES - FOLLOW STRICTLY:
-- REMOVE any food names, dish names, ingredient names, product names from the output
-- REMOVE location names or venue-specific details
-- Replace food descriptions with generic quality adjectives only
+- Describe TECHNIQUE only. Strip every proper noun: brand names, dish names, product names, place names, person names
+- Replace any subject-specific wording with a generic equivalent so the guide transfers to other topics
+- Report the ending pattern that was MEASURED above, even if it is ~~다. Never force ~~요
 - NO emojis, NO quotation marks, NO special characters
 - Use only: comma, hyphen, period, colon, parenthesis
-- Focus on writing TECHNIQUE, not content or topic
-- MOST IMPORTANT: Clearly identify and state the sentence ending pattern (종결어미) in section 1
 - Maximum 500 tokens
 
-Output: Plain text, numbered sections only. Start with SENTENCE ENDING PATTERN section.`;
+Output: Plain text, numbered sections only. Start with the SENTENCE ENDING PATTERN section.`;
 
     const response = await openai.chat.completions.create(
       buildChatParams({
@@ -160,7 +214,8 @@ Output: Plain text, numbered sections only. Start with SENTENCE ENDING PATTERN s
         messages: [
           {
             role: "system",
-            content: "You are an expert writing style analyzer. Extract detailed, accurate, and actionable style guides based on sample content. Focus on patterns, tone, structure, and conventions. Output should be practical for guiding AI-generated content.",
+            content:
+              "You are an expert writing style analyzer. Extract detailed, accurate, and actionable style guides based on sample content. Focus on patterns, tone, structure, and conventions. Never invent a pattern that contradicts measurements given to you. Output should be practical for guiding AI-generated content.",
           },
           {
             role: "user",

@@ -1,5 +1,10 @@
 # 네이버 자동화(B)는 로컬 전용이므로 Vercel 배포에서 제외합니다
 automation/
+typing-app/
 tests/
 test-results/
 .playwright-mcp/
+
+# 참고 자료(전자책 PDF·추출본). 22MB가 넘고 저작물이라 배포하지 않습니다.
+# 가이드는 로컬에서 한 번 분석해 Supabase에 저장하므로 런타임에 원본이 필요 없습니다.
+docs/

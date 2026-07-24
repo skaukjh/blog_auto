@@ -6,6 +6,7 @@ import Navigation from '@/components/layout/Navigation';
 import { Sparkles, Copy, Download, AlertCircle, ChevronDown, Check, X } from 'lucide-react';
 import type { KeywordItem, ImageAnalysisResult, ChatMessage, ExpertType, ModelConfig, WebSearchResult, RecommendationItem, PlaceInfo, ProductInfo } from '@/types/index';
 import { generateClientImageGuides } from '@/lib/utils/client-image-guide';
+import { EXPERT_LIST } from '@/lib/experts/definitions';
 import { copyToClipboard, triggerDownload } from '@/lib/utils/download';
 
 // 동적 임포트: ExpertModeTab 및 자식 컴포넌트를 별도 청크로 분리
@@ -24,7 +25,8 @@ export default function GeneratePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<{ content: string; imageAnalysis: ImageAnalysisResult; wordCount: number; keywordCounts: Record<string, number>; cost?: { usd: number; krw: number; breakdown?: { imageAnalysis: { usd: number; krw: number }; contentGeneration: { usd: number; krw: number } } } } | null>(null);
-  const [savedStyle, setSavedStyle] = useState<string | null>(null);
+  /** 문체 학습이 끝난 전문가 목록. null이면 조회 실패(잠그지 않음) */
+  const [learnedExperts, setLearnedExperts] = useState<Set<string> | null>(null);
   const [styleChecked, setStyleChecked] = useState(false);
   const [showSeoDetails, setShowSeoDetails] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
@@ -33,48 +35,41 @@ export default function GeneratePage() {
   const [imageAnalysisResult, setImageAnalysisResult] = useState<ImageAnalysisResult | null>(null);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
-  // 초기 로드 시 저장된 스타일 조회 (sessionStorage 우선)
+  // 초기 로드 시 전문가별 문체 학습 현황을 조회합니다.
+  //
+  // 전문가마다 문체가 따로 저장되므로 "전부 학습돼야 열린다"가 아니라
+  // 학습된 전문가만 개별적으로 열립니다.
   useEffect(() => {
-    const loadSavedStyle = async () => {
+    const loadLearnedExperts = async () => {
       try {
-        // 1. sessionStorage에서 먼저 확인 (클라이언트 측)
-        const sessionStyle = sessionStorage.getItem('blog_style');
-        if (sessionStyle) {
-          setSavedStyle(sessionStyle);
-          setStyleChecked(true);
-          return;
-        }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-        // 2. 서버에서 조회 시도 (Vercel에서는 실패할 수 있음)
-        // 타임아웃 5초로 설정하여 무한 대기 방지
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const response = await fetch('/api/blog/get-current-style?all=true', {
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
 
-          const response = await fetch('/api/blog/get-current-style', {
-            signal: controller.signal,
-          });
-          clearTimeout(timeoutId);
-
-          if (response.ok) {
-            const data = await response.json();
-            if (data.exists) {
-              setSavedStyle(data.style);
-              // 서버에서 받은 스타일을 sessionStorage에 저장
-              sessionStorage.setItem('blog_style', data.style);
-            }
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.styles) {
+            // 'common'은 전문가가 아니라 폴백용이므로 목록에서 제외합니다.
+            const learned = Object.keys(data.styles).filter((scope) => scope !== 'common');
+            setLearnedExperts(new Set(learned));
+            return;
           }
-        } catch (serverErr) {
-          console.warn('서버 스타일 조회 실패 (Vercel 환경일 수 있음):', serverErr);
         }
+        setLearnedExperts(new Set());
       } catch (err) {
-        console.error('저장된 스타일 조회 실패:', err);
+        console.warn('전문가별 문체 현황 조회 실패:', err);
+        // 조회에 실패했다고 글쓰기를 막지는 않습니다.
+        setLearnedExperts(null);
       } finally {
         setStyleChecked(true);
       }
     };
 
-    loadSavedStyle();
+    loadLearnedExperts();
   }, []);
 
   // 클라이언트 사이드 이미지 압축 함수 (메모리 누수 방지)
@@ -358,31 +353,55 @@ export default function GeneratePage() {
 
           </div>
 
-        {/* 스타일 상태 표시 */}
-        {styleChecked && (
-          <div className={`mb-8 p-4 rounded-lg border-2 ${
-            savedStyle
-              ? 'bg-green-50 border-green-300'
-              : 'bg-yellow-50 border-yellow-300'
-          }`}>
+        {/* 전문가별 문체 학습 현황 */}
+        {styleChecked && learnedExperts !== null && (
+          <div
+            className={`mb-8 p-4 rounded-lg border-2 ${
+              learnedExperts.size > 0
+                ? 'bg-green-50 border-green-300'
+                : 'bg-yellow-50 border-yellow-300'
+            }`}
+          >
             <div className="flex items-start gap-3">
-              {savedStyle ? (
+              {learnedExperts.size > 0 ? (
                 <>
                   <div className="text-2xl">✅</div>
                   <div className="flex-1">
-                    <p className="font-semibold text-green-900">스타일이 준비되었습니다</p>
-                    <p className="text-sm text-green-700 mt-1">
-                      저장된 블로그 스타일이 글 생성에 적용됩니다.
+                    <p className="font-semibold text-green-900">
+                      문체 학습된 전문가 {learnedExperts.size} / {EXPERT_LIST.length}
                     </p>
+                    <p className="text-sm text-green-700 mt-1">
+                      {EXPERT_LIST.filter((e) => learnedExperts.has(e.type))
+                        .map((e) => `${e.icon} ${e.name}`)
+                        .join(', ')}
+                      {' '}로 글을 쓸 수 있습니다. 각 전문가는 자기 문체만 참고합니다.
+                    </p>
+                    {learnedExperts.size < EXPERT_LIST.length && (
+                      <p className="text-xs text-green-700 mt-1">
+                        나머지 전문가는{' '}
+                        <a href="/format" className="underline font-medium">
+                          문체 학습 페이지
+                        </a>
+                        에서 각각 학습하면 열립니다.
+                      </p>
+                    )}
                   </div>
                 </>
               ) : (
                 <>
                   <AlertCircle className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <p className="font-semibold text-yellow-900">스타일이 아직 설정되지 않았습니다</p>
+                    <p className="font-semibold text-yellow-900">
+                      아직 문체를 학습한 전문가가 없습니다
+                    </p>
                     <p className="text-sm text-yellow-700 mt-1">
-                      먼저 <a href="/format" className="underline font-medium hover:text-yellow-900">블로그 스타일 분석 페이지</a>에서 블로그 글 2개를 입력하여 스타일을 학습시켜주세요.
+                      <a
+                        href="/format"
+                        className="underline font-medium hover:text-yellow-900"
+                      >
+                        문체 학습 페이지
+                      </a>
+                      에서 전문가 하나만 학습해도 그 전문가로는 바로 글을 쓸 수 있습니다.
                     </p>
                   </div>
                 </>
@@ -633,7 +652,7 @@ export default function GeneratePage() {
           <ExpertModeTab
             onGenerateWithExpert={handleGenerateExpert}
             isLoading={loading}
-            disabled={!savedStyle}
+            learnedExperts={learnedExperts}
             images={images}
             onImagesChange={setImages}
             topic={topic}
