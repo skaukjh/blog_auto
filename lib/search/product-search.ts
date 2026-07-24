@@ -1,5 +1,5 @@
 import { ProductSearchResult } from '@/types';
-import DOMPurify from 'isomorphic-dompurify';
+import { stripHtmlTags } from '@/lib/utils/html-strip';
 
 /**
  * Phase 24: 제품 후기 전문가 - Naver 쇼핑 API 검색
@@ -25,27 +25,6 @@ interface NaverShoppingResponse {
   start: number;
   display: number;
   items: NaverShoppingItem[];
-}
-
-/**
- * HTML 태그 제거 및 HTML entity 디코딩
- */
-function stripHtmlTags(html: string): string {
-  try {
-    const clean = DOMPurify.sanitize(html, {
-      ALLOWED_TAGS: [],
-      ALLOWED_ATTR: [],
-    });
-    return clean
-      .replace(/&quot;/g, '"')
-      .replace(/&amp;/g, '&')
-      .replace(/&#39;/g, "'")
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .trim();
-  } catch {
-    return html.replace(/<[^>]*>/g, '').trim();
-  }
 }
 
 /**

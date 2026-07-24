@@ -33,7 +33,6 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "docx": "^9.5.1",
-    "isomorphic-dompurify": "^3.0.0-rc.2",
     "jose": "^5.10.0",
     "js-file-download": "^0.4.12",
     "lru-cache": "^11.2.6",
