@@ -233,36 +233,35 @@ async function typeChars(page, text, baseDelayMs) {
  *
  * @param baseDelayMs 사용자가 고른 속도. 글자별로 이 값의 0.5~1.8배로 흔듭니다.
  */
+/**
+ * 단어를 고민하는 것처럼, 잠깐 다른 짧은 말을 썼다가 지우는 데 쓰는 후보입니다.
+ * 문맥과 무관하지만 짧아서 "어… 뭐라고 쓰지" 하는 망설임처럼 보입니다.
+ */
+const HESITATION_WORDS = ['좀 ', '약간 ', '조금 ', '뭔가 ', '그 ', '이제 ', '살짝 '];
+
 async function typeSentence(page, sentence, baseDelayMs) {
   // 단어 단위로 나눕니다. 뒤따르는 공백을 단어에 붙여 그대로 재현합니다.
   const words = sentence.match(/\S+\s*/g) || [sentence];
 
   for (let w = 0; w < words.length; w++) {
-    // 가끔(2.5%) 이 단어부터 2~3단어를 썼다가 통째로 지우고 다시 씁니다.
-    // 문장 첫 단어와 끝 두 단어에서는 하지 않습니다.
-    if (w > 0 && w < words.length - 2 && Math.random() < 0.025) {
-      const redoCount = randomBetween(2, 3);
-      const chunk = words.slice(w, w + redoCount).join('');
+    // 가끔(3%) 이 자리에서 "다른 단어를 썼다가 지우고" 원래 단어를 씁니다.
+    // 사람이 단어를 고르며 고쳐 쓰는 모습입니다. 첫 단어와 끝 단어는 제외.
+    if (w > 0 && w < words.length - 1 && Math.random() < 0.03) {
+      // 1) 엉뚱한 짧은 단어를 먼저 씁니다.
+      const wrong = HESITATION_WORDS[randomBetween(0, HESITATION_WORDS.length - 1)];
+      await typeChars(page, wrong, baseDelayMs);
+      await sleep(randomBetween(300, 700)); // "아, 이 말이 아닌데" 하는 순간
 
-      // 1) 일단 정상적으로 씁니다.
-      await typeChars(page, chunk, baseDelayMs);
-      await sleep(randomBetween(300, 700)); // 잘못 썼다고 느끼는 순간
-
-      // 2) 방금 친 만큼 백스페이스로 지웁니다 (빠르게).
-      for (let k = 0; k < chunk.length; k++) {
+      // 2) 방금 친 만큼 지웁니다 (빠르게).
+      for (let k = 0; k < wrong.length; k++) {
         await page.keyboard.press('Backspace');
         await sleep(randomBetween(30, 90));
       }
-      await sleep(randomBetween(250, 600)); // 다시 쓰기 전 잠깐
-
-      // 3) 같은 내용을 다시 씁니다.
-      await typeChars(page, chunk, baseDelayMs);
-
-      w += redoCount - 1; // 이미 처리한 단어들은 건너뜁니다.
-      continue;
+      await sleep(randomBetween(200, 500));
+      // 이어서 아래 일반 타이핑으로 원래 단어(words[w])를 칩니다.
     }
 
-    // 일반 단어 타이핑
+    // 일반 단어 타이핑 (원래 단어)
     await typeChars(page, words[w], baseDelayMs);
 
     // 단어 사이에서 가끔(4%) 잠깐 멈춥니다 (다음 말을 고르듯). 글자 중간이 아니라 단어 경계.
@@ -459,13 +458,16 @@ async function typePost(options) {
           percent,
         });
 
+        // 문장이 끝나면 무조건 줄을 바꿉니다 (사용자 요청).
+        await page.keyboard.press('Enter');
+
         // 문장 사이 간격 (사람이 다음 문장을 생각하듯 잠깐).
         await sleep(randomBetween(1000, 2000));
       }
 
       if (p < paragraphs.length - 1) {
+        // 문단이 바뀔 때는 빈 줄을 하나 더 넣어 문단을 구분합니다.
         await page.keyboard.press('Enter');
-        // 문단 사이는 조금 더 길게.
         await sleep(randomBetween(1500, 3000));
       }
     }
