@@ -35,17 +35,20 @@ const LOGIN_PW_SELECTORS = ['#pw', 'input[name="pw"]', 'input[id="pw"]'];
 /**
  * 네이버 로그인 버튼 (앞에서부터 시도).
  *
- * 핵심은 `id="log.login"` 으로, 네이버가 오래 유지해 온 표준 로그인 버튼입니다.
- * id에 점(.)이 있어 CSS class로 오인되지 않도록 [id="..."] 속성 선택자를 씁니다.
- * has-text("로그인")는 간편로그인 탭 등 다른 "로그인" 요소와 충돌해 마지막 폴백입니다.
+ * 2026-07 기준 실제 DOM을 조사한 셀렉터입니다(node inspect-login.cjs).
+ * 네이버는 반응형이라 `#loginBtn_row`(가로) / `#loginBtn_column`(세로) 두 버튼이
+ * 모두 DOM에 있고 화면 크기에 따라 하나만 보입니다.
+ *
+ * ⚠️ 같은 화면에 "패스키 로그인"(#passkeyBtn_*) 버튼도 있고 class가 똑같이
+ *    `btn_done`이라, has-text("로그인")를 쓰면 패스키 버튼을 눌러 로그인이
+ *    안 됩니다. 그래서 정확히 "로그인"인 것(text-is)만, id로 먼저 잡습니다.
  */
 const LOGIN_BUTTON_SELECTORS = [
-  '[id="log.login"]',
-  'button[type="submit"].btn_login',
-  '.btn_login',
-  'button.btn_login',
-  'button[type="submit"]',
-  'button:has-text("로그인")',
+  '#loginBtn_row',
+  '#loginBtn_column',
+  'button[id^="loginBtn"]',
+  'button.btn_done:text-is("로그인")',
+  'button:text-is("로그인")',
 ];
 
 function randomBetween(min, max) {
@@ -243,9 +246,9 @@ async function typeSentence(page, sentence, baseDelayMs) {
     // 글자별 딜레이를 크게 흔들어 한 박자로 안 보이게 합니다.
     await sleep(randomBetween(Math.round(baseDelayMs * 0.5), Math.round(baseDelayMs * 1.8)));
 
-    // 가끔(2.5%) 문장 중간에 2~5초 멈춥니다 (다음 말을 고르는 것처럼).
-    if (i > 3 && i < sentence.length - 3 && ch !== ' ' && Math.random() < 0.025) {
-      await sleep(randomBetween(2000, 5000));
+    // 가끔(2%) 문장 중간에 잠깐 멈춥니다 (다음 말을 고르는 것처럼).
+    if (i > 3 && i < sentence.length - 3 && ch !== ' ' && Math.random() < 0.02) {
+      await sleep(randomBetween(600, 1400));
     }
   }
 }
@@ -275,10 +278,14 @@ async function typePost(options) {
   const warnings = [];
   const startedAt = Date.now();
   let browser = null;
+  let browserAlive = true; // 사용자가 크롬 창을 직접 닫으면 false가 됩니다.
   let typedChars = 0;
 
   const checkStop = () => {
     if (shouldStop()) throw new Error('사용자가 중단했습니다.');
+    if (!browserAlive) {
+      throw new Error('크롬 창이 닫혀 작업을 멈췄습니다. 다시 시도해주세요.');
+    }
   };
 
   try {
@@ -306,9 +313,22 @@ async function typePost(options) {
       headless: false,
       channel: 'chrome',
       args: ['--disable-blink-features=AutomationControlled', '--disable-dev-shm-usage'],
+      // 프로그램(exe)을 꺼도 크롬 창은 그대로 남게 합니다.
+      // Playwright가 프로세스 종료 시그널에 브라우저를 함께 닫지 않도록 막습니다.
+      handleSIGINT: false,
+      handleSIGTERM: false,
+      handleSIGHUP: false,
+    });
+
+    // 사용자가 크롬 창을 직접 닫으면 즉시 알아채 멈추도록 합니다.
+    browser.on('disconnected', () => {
+      browserAlive = false;
     });
 
     const page = await browser.newPage();
+    page.on('close', () => {
+      browserAlive = false;
+    });
     page.setDefaultTimeout(60000);
     page.setDefaultNavigationTimeout(60000);
 
@@ -420,14 +440,14 @@ async function typePost(options) {
           percent,
         });
 
-        // 문장 사이는 5~10초 쉽니다 (사람이 다음 문장을 생각하듯).
-        await sleep(randomBetween(5000, 10000));
+        // 문장 사이 간격 (사람이 다음 문장을 생각하듯 잠깐).
+        await sleep(randomBetween(1000, 2000));
       }
 
       if (p < paragraphs.length - 1) {
         await page.keyboard.press('Enter');
-        // 문단(문단 = 글 덩어리) 사이는 더 길게 8~15초 쉽니다.
-        await sleep(randomBetween(8000, 15000));
+        // 문단 사이는 조금 더 길게.
+        await sleep(randomBetween(1500, 3000));
       }
     }
 
