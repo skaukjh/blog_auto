@@ -30,6 +30,23 @@ export interface ImageAnalysisResult {
   images: CompressedImageAnalysis[];
   overall: OverallAnalysis;
   costEstimate: number;
+  /** 실제 API 응답의 토큰 사용량 (있으면 화면 비용이 추정치가 아니라 실측값입니다) */
+  usage?: TokenUsage;
+}
+
+/**
+ * 실제 API 응답(`response.usage`)에서 받은 토큰 사용량과 공식 단가로 계산한 비용.
+ *
+ * 과거에는 토큰 수를 하드코딩해 추정했기 때문에 화면 금액이 실제 청구액과
+ * 달랐습니다. 이제는 이 값을 그대로 합산해 보여줍니다.
+ */
+export interface TokenUsage {
+  /** 실제 호출에 쓰인 모델 ID */
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  /** 공식 단가로 계산한 비용 (USD) */
+  usd: number;
 }
 
 // 블로그 스타일 관련 타입
@@ -85,6 +102,26 @@ export interface GeneratedContentWithImages {
   imageGuides: ImageGuide[];
   wordCount: number;
   keywordCounts: Record<string, number>;
+  /**
+   * 그대로 들어가야 했는데 최종 글에서 찾지 못한 소제목 목록.
+   *
+   * 비어 있으면 제목·소제목이 입력한 그대로 모두 들어갔다는 뜻입니다.
+   * 값이 있으면 화면에 경고로 띄워 사용자가 재생성을 판단할 수 있게 합니다.
+   */
+  missingSubheadings?: string[];
+  /** 이 글을 만드는 데 실제로 쓴 토큰 사용량 */
+  usage?: TokenUsage;
+}
+
+/**
+ * 사용자가 직접 정한 글의 골격.
+ *
+ * 제목과 소제목은 **토씨 하나 바꾸지 않고** 최종 글에 그대로 들어갑니다.
+ * AI는 각 소제목 밑에 그 소제목에 해당하는 본문만 씁니다.
+ */
+export interface PostOutline {
+  title: string;
+  subheadings: string[];
 }
 
 export interface MarkerInfo {

@@ -73,3 +73,6 @@ investigate-popup*
 /typing-app/dist/
 /typing-app/dist-single/
 에러.png
+
+# Claude Code 작업용 worktree (로컬 전용)
+.claude/worktrees/

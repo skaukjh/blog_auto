@@ -8,6 +8,16 @@ import type { KeywordItem, ImageAnalysisResult, ChatMessage, ExpertType, ModelCo
 import { generateClientImageGuides } from '@/lib/utils/client-image-guide';
 import { EXPERT_LIST } from '@/lib/experts/definitions';
 import { copyToClipboard, triggerDownload } from '@/lib/utils/download';
+import { MIN_SUBHEADINGS } from '@/lib/utils/outline';
+import {
+  saveDraft,
+  loadDraft,
+  clearDraft,
+  saveResult,
+  loadResult,
+  type StoredDraft,
+  type StoredResult,
+} from '@/lib/utils/draft-storage';
 
 // 동적 임포트: ExpertModeTab 및 자식 컴포넌트를 별도 청크로 분리
 const ExpertModeTab = dynamic(() => import('@/components/expert/ExpertModeTab').then(mod => ({ default: mod.ExpertModeTab })), {
@@ -15,9 +25,34 @@ const ExpertModeTab = dynamic(() => import('@/components/expert/ExpertModeTab').
   ssr: true,
 });
 
+/** 화면에 띄우는 생성 결과 */
+interface GenerationResult {
+  content: string;
+  imageAnalysis: ImageAnalysisResult;
+  wordCount: number;
+  keywordCounts: Record<string, number>;
+  cost?: {
+    usd: number;
+    krw: number;
+    breakdown?: {
+      imageAnalysis: { usd: number; krw: number };
+      contentGeneration: { usd: number; krw: number };
+    };
+  };
+  /** 그대로 들어가야 했는데 글에서 찾지 못한 소제목 */
+  missingSubheadings?: string[];
+}
+
 export default function GeneratePage() {
-  const [topic, setTopic] = useState('');
+  // 제목과 소제목은 토씨 하나 바꾸지 않고 글에 그대로 들어갑니다.
+  // (기존 '주제' 입력은 2026-07-25 사용자 요청으로 제거하고 제목이 그 역할을 겸합니다)
+  const [title, setTitle] = useState('');
+  const [subheadings, setSubheadings] = useState<string[]>(
+    Array.from({ length: MIN_SUBHEADINGS }, () => '')
+  );
   const [length, setLength] = useState<'short' | 'medium' | 'long'>('medium');
+  // 선택한 전문가도 복구 대상이라 여기서 관리합니다 (과거에는 ExpertModeTab 내부 상태였습니다)
+  const [selectedExpert, setSelectedExpert] = useState<ExpertType | null>(null);
   const [images, setImages] = useState<File[]>([]);
   const [keywords, setKeywords] = useState<KeywordItem[]>([]);
   const [startSentence, setStartSentence] = useState('');
@@ -26,7 +61,14 @@ export default function GeneratePage() {
   const [personalExperience, setPersonalExperience] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [result, setResult] = useState<{ content: string; imageAnalysis: ImageAnalysisResult; wordCount: number; keywordCounts: Record<string, number>; cost?: { usd: number; krw: number; breakdown?: { imageAnalysis: { usd: number; krw: number }; contentGeneration: { usd: number; krw: number } } } } | null>(null);
+  const [result, setResult] = useState<GenerationResult | null>(null);
+  /** 복구 가능한 이전 작업 (초안 / 직전 생성 글) */
+  const [recoverable, setRecoverable] = useState<{
+    draft: StoredDraft | null;
+    result: StoredResult | null;
+  }>({ draft: null, result: null });
+  /** 초안 자동 저장이 마지막으로 성공한 시각 */
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
   /** 문체 학습이 끝난 전문가 목록. null이면 조회 실패(잠그지 않음) */
   const [learnedExperts, setLearnedExperts] = useState<Set<string> | null>(null);
   const [styleChecked, setStyleChecked] = useState(false);
@@ -72,6 +114,119 @@ export default function GeneratePage() {
     };
 
     loadLearnedExperts();
+  }, []);
+
+  // 이전에 하던 작업이 남아 있는지 확인합니다.
+  //
+  // 실수로 창을 닫거나 다른 페이지로 이동하면 사진·제목·소제목·경험글이 전부
+  // 사라졌고, 돈을 들여 만든 글도 되살릴 방법이 없었습니다. 이제는 IndexedDB에
+  // 자동 저장해 두고 여기서 복구 배너로 알려줍니다.
+  useEffect(() => {
+    const checkRecoverable = async () => {
+      const [draft, saved] = await Promise.all([loadDraft(), loadResult()]);
+      if (!draft && !saved) return;
+
+      const draftHasContent =
+        !!draft &&
+        (draft.title.trim().length > 0 ||
+          draft.subheadings.some((s) => s.trim().length > 0) ||
+          draft.keywords.length > 0 ||
+          draft.personalExperience.trim().length > 0 ||
+          draft.images.length > 0);
+
+      setRecoverable({ draft: draftHasContent ? draft : null, result: saved });
+    };
+
+    checkRecoverable();
+  }, []);
+
+  /** 입력한 것이 하나라도 있는지 (빈 초안을 저장해 배너가 뜨는 것을 막습니다) */
+  const hasAnyInput =
+    title.trim().length > 0 ||
+    subheadings.some((s) => s.trim().length > 0) ||
+    keywords.length > 0 ||
+    personalExperience.trim().length > 0 ||
+    images.length > 0;
+
+  // 입력값을 자동 저장합니다. 타이핑마다 쓰지 않도록 1초 디바운스를 둡니다.
+  useEffect(() => {
+    if (!hasAnyInput) return;
+
+    const timer = setTimeout(async () => {
+      const ok = await saveDraft({
+        title,
+        subheadings,
+        keywords,
+        length,
+        personalExperience,
+        images,
+        expertType: selectedExpert,
+      });
+      if (ok) setDraftSavedAt(new Date().toISOString());
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [
+    hasAnyInput,
+    title,
+    subheadings,
+    keywords,
+    length,
+    personalExperience,
+    images,
+    selectedExpert,
+  ]);
+
+  /** 저장된 초안을 현재 화면으로 되살립니다 */
+  const handleRestoreDraft = useCallback(() => {
+    const draft = recoverable.draft;
+    if (!draft) return;
+
+    setTitle(draft.title);
+    setSubheadings(
+      draft.subheadings.length >= MIN_SUBHEADINGS
+        ? draft.subheadings
+        : [
+            ...draft.subheadings,
+            ...Array.from({ length: MIN_SUBHEADINGS - draft.subheadings.length }, () => ''),
+          ]
+    );
+    setKeywords(draft.keywords);
+    setLength(draft.length);
+    setPersonalExperience(draft.personalExperience);
+    setImages(draft.images);
+    setSelectedExpert(draft.expertType);
+    setRecoverable((prev) => ({ ...prev, draft: null }));
+    setError('');
+  }, [recoverable.draft]);
+
+  /** 저장해 둔 직전 생성 글을 다시 화면에 띄웁니다 (다운로드·복사 가능) */
+  const handleRestoreResult = useCallback(() => {
+    const saved = recoverable.result;
+    if (!saved) return;
+
+    setResult({
+      content: saved.content,
+      imageAnalysis: saved.imageAnalysis,
+      wordCount: saved.wordCount,
+      keywordCounts: saved.keywordCounts,
+      cost: saved.cost,
+      missingSubheadings: saved.missingSubheadings,
+    });
+    setImageAnalysisResult(saved.imageAnalysis);
+    if (saved.title) setTitle(saved.title);
+    setChatHistory([]);
+  }, [recoverable.result]);
+
+  /**
+   * 복구를 포기하고 저장된 초안을 지웁니다.
+   *
+   * 저장된 생성 결과는 지우지 않습니다. 돈이 들어간 글을 실수로 날리지 않도록,
+   * 그건 다음 생성 때 자동으로 덮어써지게만 둡니다.
+   */
+  const handleDiscardRecovery = useCallback(async () => {
+    await clearDraft();
+    setRecoverable((prev) => ({ ...prev, draft: null }));
   }, []);
 
   // 클라이언트 사이드 이미지 압축 함수 (메모리 누수 방지)
@@ -149,10 +304,18 @@ export default function GeneratePage() {
       setError('이미지를 최소 1장 이상 업로드해주세요');
       return;
     }
-    if (!topic.trim()) {
-      setError('주제를 입력해주세요');
+    if (!title.trim()) {
+      setError('제목을 입력해주세요');
       return;
     }
+
+    // 빈 칸은 글에 넣지 않습니다. 채워진 소제목만 골라 개수를 확인합니다.
+    const filledSubheadings = subheadings.map((s) => s.trim()).filter(Boolean);
+    if (filledSubheadings.length < MIN_SUBHEADINGS) {
+      setError(`소제목을 최소 ${MIN_SUBHEADINGS}개 입력해주세요 (현재 ${filledSubheadings.length}개)`);
+      return;
+    }
+
     if (!keywords.length) {
       setError('키워드를 최소 1개 이상 입력해주세요');
       return;
@@ -175,7 +338,8 @@ export default function GeneratePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           images: compressedImages,
-          topic,
+          // 이미지 분석에서 "이 사진들이 무슨 글에 쓰이는지"를 알려주는 값입니다.
+          topic: title,
           expertType: params.expertType,
           modelConfig: params.modelConfig,
         }),
@@ -193,7 +357,8 @@ export default function GeneratePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          topic,
+          title,
+          subheadings: filledSubheadings,
           length,
           keywords,
           imageAnalysis: imageData.analysis,
@@ -215,23 +380,31 @@ export default function GeneratePage() {
         throw new Error(contentData.error || '콘텐츠 생성 실패');
       }
 
-      setResult({
+      const generated: GenerationResult = {
         content: contentData.content.content,
         imageAnalysis: imageData.analysis,
         wordCount: contentData.content.wordCount,
         keywordCounts: contentData.content.keywordCounts,
         cost: contentData.cost,
-      });
+        missingSubheadings: contentData.content.missingSubheadings,
+      };
+
+      setResult(generated);
       setImageAnalysisResult(imageData.analysis);
       setChatHistory([]);
       setRefineInput('');
       setError('');
+
+      // 돈이 들어간 결과물이라 즉시 저장합니다. 이후 창을 닫아도 다시 열어
+      // 내용을 확인하고 다운로드할 수 있습니다.
+      await saveResult({ ...generated, title });
+      setRecoverable((prev) => ({ ...prev, result: null }));
     } catch (err) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다');
     } finally {
       setLoading(false);
     }
-  }, [images, topic, keywords, length, startSentence, endSentence, personalExperience, compressImage]);
+  }, [images, title, subheadings, keywords, length, startSentence, endSentence, personalExperience, compressImage]);
 
   const handleCopyToClipboard = useCallback(async () => {
     if (!result) return;
@@ -293,11 +466,13 @@ export default function GeneratePage() {
 
       setChatHistory((prev) => [...prev, assistantMessage]);
 
-      // 결과 업데이트
-      setResult({
+      // 결과 업데이트 (저장본도 함께 갱신해 창을 닫아도 수정된 글이 남게 합니다)
+      const updated: GenerationResult = {
         ...result,
         content: data.refinedContent,
-      });
+      };
+      setResult(updated);
+      await saveResult({ ...updated, title });
 
       console.log('✅ 콘텐츠가 수정되었습니다');
       console.log('수정된 콘텐츠 길이:', data.refinedContent.length);
@@ -316,7 +491,7 @@ export default function GeneratePage() {
     } finally {
       setIsRefining(false);
     }
-  }, [refineInput, result, imageAnalysisResult, keywords]);
+  }, [refineInput, result, imageAnalysisResult, keywords, title]);
 
   // 이미지 가이드 메모이제이션 (계산 비용이 높은 연산)
   const imageGuides = useMemo(() =>
@@ -336,9 +511,9 @@ export default function GeneratePage() {
         keywordCounts: result.keywordCounts,
       },
       'txt',
-      topic
+      title
     );
-  }, [result, imageGuides, topic]);
+  }, [result, imageGuides, title]);
 
   return (
     <div className="min-h-screen">
@@ -355,6 +530,64 @@ export default function GeneratePage() {
           </p>
 
           </div>
+
+        {/* 이전 작업 복구 안내 —
+            실수로 창을 닫거나 이동해도 입력값과 생성된 글이 여기서 되살아납니다 */}
+        {(recoverable.draft || (recoverable.result && !result)) && (
+          <div className="mb-8 p-4 rounded-lg border-2 border-blue-300 bg-blue-50">
+            <div className="flex items-start gap-3">
+              <div className="text-2xl">💾</div>
+              <div className="flex-1">
+                <p className="font-semibold text-blue-900">이전에 하던 작업이 남아 있습니다</p>
+
+                {recoverable.draft && (
+                  <div className="mt-2">
+                    <p className="text-sm text-blue-800">
+                      입력 내용
+                      {recoverable.draft.title && ` · 제목 "${recoverable.draft.title}"`}
+                      {recoverable.draft.images.length > 0 &&
+                        ` · 사진 ${recoverable.draft.images.length}장`}
+                      {recoverable.draft.subheadings.filter((s) => s.trim()).length > 0 &&
+                        ` · 소제목 ${recoverable.draft.subheadings.filter((s) => s.trim()).length}개`}
+                      {recoverable.draft.savedAt &&
+                        ` (${new Date(recoverable.draft.savedAt).toLocaleString('ko-KR')} 저장)`}
+                    </p>
+                    <button
+                      onClick={handleRestoreDraft}
+                      className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700"
+                    >
+                      입력 내용 되살리기
+                    </button>
+                  </div>
+                )}
+
+                {recoverable.result && !result && (
+                  <div className="mt-3">
+                    <p className="text-sm text-blue-800">
+                      직전에 생성된 글 ({recoverable.result.wordCount.toLocaleString()}자
+                      {recoverable.result.savedAt &&
+                        `, ${new Date(recoverable.result.savedAt).toLocaleString('ko-KR')}`}
+                      )
+                    </p>
+                    <button
+                      onClick={handleRestoreResult}
+                      className="mt-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700"
+                    >
+                      생성된 글 다시 보기 (다운로드 가능)
+                    </button>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleDiscardRecovery}
+                  className="mt-3 text-xs text-blue-700 underline hover:text-blue-900"
+                >
+                  새로 시작하기 (저장된 입력 삭제)
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 전문가별 문체 학습 현황 */}
         {styleChecked && learnedExperts !== null && (
@@ -474,6 +707,23 @@ export default function GeneratePage() {
                 </div>
               );
             })()}
+
+            {/* 제목·소제목은 그대로 들어가야 하므로, 못 들어간 것이 있으면 알려줍니다 */}
+            {result.missingSubheadings && result.missingSubheadings.length > 0 && (
+              <div className="p-4 rounded-lg border-2 border-orange-300 bg-orange-50">
+                <p className="font-semibold text-orange-900">
+                  ⚠️ 소제목 {result.missingSubheadings.length}개가 그대로 들어가지 않았습니다
+                </p>
+                <ul className="mt-2 space-y-1 text-sm text-orange-800">
+                  {result.missingSubheadings.map((sub, idx) => (
+                    <li key={idx}>· {sub}</li>
+                  ))}
+                </ul>
+                <p className="text-xs text-orange-700 mt-2">
+                  아래 &ldquo;부분 수정 요청&rdquo;으로 넣어달라고 요청하거나, 다시 생성해 보세요.
+                </p>
+              </div>
+            )}
 
             <div className="glass-effect rounded-xl p-8 shadow-soft">
               <div className="whitespace-pre-wrap text-gray-800 text-base leading-relaxed font-light">
@@ -652,22 +902,35 @@ export default function GeneratePage() {
             </div>
           </div>
         ) : (
-          <ExpertModeTab
-            onGenerateWithExpert={handleGenerateExpert}
-            isLoading={loading}
-            learnedExperts={learnedExperts}
-            images={images}
-            onImagesChange={setImages}
-            topic={topic}
-            onTopicChange={setTopic}
-            keywords={keywords}
-            onKeywordsChange={setKeywords}
-            length={length}
-            onLengthChange={setLength}
-            personalExperience={personalExperience}
-            onPersonalExperienceChange={setPersonalExperience}
-            error={error}
-          />
+          <>
+            {/* 자동 저장 표시 — 창이 닫혀도 남는다는 것을 알 수 있게 합니다 */}
+            {draftSavedAt && (
+              <p className="mb-3 text-xs text-gray-500">
+                💾 자동 저장됨 ({new Date(draftSavedAt).toLocaleTimeString('ko-KR')}) · 창을 닫아도
+                입력 내용이 남습니다
+              </p>
+            )}
+            <ExpertModeTab
+              onGenerateWithExpert={handleGenerateExpert}
+              isLoading={loading}
+              learnedExperts={learnedExperts}
+              selectedExpert={selectedExpert}
+              onSelectExpert={setSelectedExpert}
+              images={images}
+              onImagesChange={setImages}
+              title={title}
+              onTitleChange={setTitle}
+              subheadings={subheadings}
+              onSubheadingsChange={setSubheadings}
+              keywords={keywords}
+              onKeywordsChange={setKeywords}
+              length={length}
+              onLengthChange={setLength}
+              personalExperience={personalExperience}
+              onPersonalExperienceChange={setPersonalExperience}
+              error={error}
+            />
+          </>
         )}
 
       </div>

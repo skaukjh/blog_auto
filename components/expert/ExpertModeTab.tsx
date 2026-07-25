@@ -10,6 +10,21 @@ import { PlaceReviewSelector } from './PlaceReviewSelector';
 import { ProductSearchSection } from './ProductSearchSection';
 import ImageUpload from '../form/ImageUpload';
 import KeywordInput from '../form/KeywordInput';
+import { MAX_SUBHEADINGS, MIN_SUBHEADINGS, SECTION_CHAR_RANGE } from '@/lib/utils/outline';
+
+/** 소제목 입력칸에 돌려 쓰는 예시 문구 (실제 값이 아니라 placeholder입니다) */
+const SUBHEADING_PLACEHOLDERS = [
+  '예: 위치와 주차',
+  '예: 매장 분위기',
+  '예: 주문한 메뉴',
+  '예: 맛 후기',
+  '예: 가격과 가성비',
+  '예: 재방문 의사',
+  '예: 이런 분께 추천',
+  '예: 방문 팁',
+  '예: 영업시간',
+  '예: 총평',
+];
 
 // 동적 임포트: 웹 검색 결과와 추천 목록은 필요할 때만 로드
 const WebSearchResults = dynamic(() => import('./WebSearchResults').then(mod => ({ default: mod.WebSearchResults })), {
@@ -38,11 +53,20 @@ interface ExpertModeTabProps {
    * 하나가 학습됐다고 나머지까지 열리지 않습니다.
    */
   learnedExperts?: Set<string> | null;
+  /**
+   * 선택된 전문가. 자동 저장·복구 대상이라 부모(generate/page.tsx)가 관리합니다.
+   */
+  selectedExpert: ExpertType | null;
+  onSelectExpert: (expert: ExpertType | null) => void;
   // 필수 입력 필드
   images: File[];
   onImagesChange: (images: File[]) => void; // ImageUpload는 onChange를 사용하지만 여기서는 onImagesChange로 래핑
-  topic: string;
-  onTopicChange: (topic: string) => void;
+  /** 글 제목 — 토씨 하나 바꾸지 않고 글의 첫 줄에 그대로 들어갑니다 */
+  title: string;
+  onTitleChange: (title: string) => void;
+  /** 소제목 3~10개 — 순서·표기 그대로 들어가고, 각 소제목 밑에 그 내용이 들어갑니다 */
+  subheadings: string[];
+  onSubheadingsChange: (subheadings: string[]) => void;
   keywords: KeywordItem[];
   onKeywordsChange: (keywords: KeywordItem[]) => void;
   length: 'short' | 'medium' | 'long';
@@ -58,10 +82,14 @@ export function ExpertModeTab({
   isLoading = false,
   disabled = false,
   learnedExperts = null,
+  selectedExpert,
+  onSelectExpert,
   images,
   onImagesChange,
-  topic,
-  onTopicChange,
+  title,
+  onTitleChange,
+  subheadings,
+  onSubheadingsChange,
   keywords,
   onKeywordsChange,
   length,
@@ -70,10 +98,11 @@ export function ExpertModeTab({
   onPersonalExperienceChange,
   error,
 }: ExpertModeTabProps) {
-  const [selectedExpert, setSelectedExpert] = useState<ExpertType | null>(null);
+  // 기본값은 ModelSelector의 '균형형' 프리셋과 같아야 합니다.
+  // (이미지 분석은 luna, 본문 생성만 terra — 글당 약 100원)
   const [modelConfig, setModelConfig] = useState<ModelConfig>({
-    imageAnalysisModel: 'gpt-5.6-terra',
-    webSearchModel: 'gpt-5.6-terra',
+    imageAnalysisModel: 'gpt-5.6-luna',
+    webSearchModel: 'gpt-5.6-luna',
     contentGenerationModel: 'gpt-5.6-terra',
     creativity: 7,
   });
@@ -185,6 +214,45 @@ export function ExpertModeTab({
     setModelConfig(prev => ({ ...prev, creativity }));
   }, []);
 
+  // 소제목 편집 핸들러 —
+  // 소제목의 순서가 글의 순서이므로 위/아래 이동을 함께 제공합니다.
+  const handleSubheadingChange = useCallback(
+    (index: number, value: string) => {
+      const next = [...subheadings];
+      next[index] = value;
+      onSubheadingsChange(next);
+    },
+    [subheadings, onSubheadingsChange]
+  );
+
+  const handleAddSubheading = useCallback(() => {
+    if (subheadings.length >= MAX_SUBHEADINGS) return;
+    onSubheadingsChange([...subheadings, '']);
+  }, [subheadings, onSubheadingsChange]);
+
+  const handleRemoveSubheading = useCallback(
+    (index: number) => {
+      if (subheadings.length <= MIN_SUBHEADINGS) return;
+      onSubheadingsChange(subheadings.filter((_, idx) => idx !== index));
+    },
+    [subheadings, onSubheadingsChange]
+  );
+
+  const handleMoveSubheading = useCallback(
+    (index: number, direction: -1 | 1) => {
+      const target = index + direction;
+      if (target < 0 || target >= subheadings.length) return;
+      const next = [...subheadings];
+      [next[index], next[target]] = [next[target], next[index]];
+      onSubheadingsChange(next);
+    },
+    [subheadings, onSubheadingsChange]
+  );
+
+  /** 실제로 값이 채워진 소제목 (빈 칸은 글에 들어가지 않습니다) */
+  const filledSubheadings = subheadings.filter((s) => s.trim().length > 0);
+  const sectionCharRange = SECTION_CHAR_RANGE[length];
+
   // 맛집 정보 검색
   const handlePlaceSearch = useCallback(async () => {
     if (!placeName.trim()) {
@@ -236,7 +304,7 @@ export function ExpertModeTab({
       {/* 전문가 선택 */}
       <ExpertSelector
         selectedExpert={selectedExpert}
-        onSelectExpert={setSelectedExpert}
+        onSelectExpert={onSelectExpert}
         disabled={disabled || isLoading}
         learnedExperts={learnedExperts}
       />
@@ -272,21 +340,105 @@ export function ExpertModeTab({
               )}
             </div>
 
-            {/* 주제 입력 */}
+            {/* 제목 입력 — 글에 그대로 들어갑니다 */}
             <div>
-              <h3 className="text-lg font-semibold mb-3">📝 주제 입력 <span className="text-red-500">*필수</span></h3>
+              <h3 className="text-lg font-semibold mb-3">📝 제목 <span className="text-red-500">*필수</span></h3>
+              <p className="text-sm text-gray-600 mb-2">
+                입력한 제목이 <strong>토씨 하나 바뀌지 않고</strong> 글의 첫 줄에 그대로 들어갑니다.
+              </p>
               <input
                 type="text"
-                value={topic}
-                onChange={(e) => onTopicChange(e.target.value)}
-                placeholder="블로그 글의 주제를 입력하세요... (예: 강남 맛집 추천, 요즘 핫한 제품)"
+                value={title}
+                onChange={(e) => onTitleChange(e.target.value)}
+                placeholder="예: 성수동 민물장어 무한리필 송림복장어 성수직영점 다녀왔어요"
                 disabled={disabled || isLoading}
                 maxLength={100}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:bg-gray-100"
               />
-              <p className="text-xs text-gray-500 mt-1">{topic.length} / 100</p>
-              {topic.trim().length > 0 && (
-                <p className="text-sm text-green-600 mt-1">✓ 주제가 입력되었습니다</p>
+              <p className="text-xs text-gray-500 mt-1">{title.length} / 100</p>
+              {title.trim().length > 0 && (
+                <p className="text-sm text-green-600 mt-1">✓ 제목이 입력되었습니다</p>
+              )}
+            </div>
+
+            {/* 소제목 입력 — 순서·표기 그대로 들어가고 각 소제목 밑에 그 내용이 채워집니다 */}
+            <div>
+              <h3 className="text-lg font-semibold mb-3">
+                🧩 소제목 <span className="text-red-500">*필수 {MIN_SUBHEADINGS}~{MAX_SUBHEADINGS}개</span>
+              </h3>
+              <p className="text-sm text-gray-600 mb-3">
+                소제목도 <strong>그대로</strong> 들어갑니다. 각 소제목 밑에는 <strong>그 소제목에 해당하는 내용만</strong> 쓰여요
+                (예: 소제목이 &ldquo;위치&rdquo;면 그 아래는 위치 이야기). 소제목 하나당{' '}
+                {sectionCharRange.min}~{sectionCharRange.max}자로 채워집니다.
+              </p>
+
+              <div className="space-y-2">
+                {subheadings.map((sub, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <span className="w-6 text-sm text-gray-500 text-right">{idx + 1}.</span>
+                    <input
+                      type="text"
+                      value={sub}
+                      onChange={(e) => handleSubheadingChange(idx, e.target.value)}
+                      placeholder={SUBHEADING_PLACEHOLDERS[idx % SUBHEADING_PLACEHOLDERS.length]}
+                      disabled={disabled || isLoading}
+                      maxLength={60}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:bg-gray-100"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleMoveSubheading(idx, -1)}
+                      disabled={disabled || isLoading || idx === 0}
+                      title="위로"
+                      className="px-2 py-2 text-gray-500 hover:text-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMoveSubheading(idx, 1)}
+                      disabled={disabled || isLoading || idx === subheadings.length - 1}
+                      title="아래로"
+                      className="px-2 py-2 text-gray-500 hover:text-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSubheading(idx)}
+                      disabled={disabled || isLoading || subheadings.length <= MIN_SUBHEADINGS}
+                      title={
+                        subheadings.length <= MIN_SUBHEADINGS
+                          ? `최소 ${MIN_SUBHEADINGS}개는 있어야 합니다`
+                          : '삭제'
+                      }
+                      className="px-2 py-2 text-red-500 hover:text-red-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAddSubheading}
+                disabled={disabled || isLoading || subheadings.length >= MAX_SUBHEADINGS}
+                className="mt-3 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-primary hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                + 소제목 추가 ({subheadings.length} / {MAX_SUBHEADINGS})
+              </button>
+
+              {filledSubheadings.length < MIN_SUBHEADINGS ? (
+                <p className="text-sm text-orange-600 mt-2">
+                  소제목을 {MIN_SUBHEADINGS - filledSubheadings.length}개 더 채워주세요 (현재 {filledSubheadings.length}개)
+                </p>
+              ) : (
+                <p className="text-sm text-green-600 mt-2">
+                  ✓ 소제목 {filledSubheadings.length}개 · 전체 약{' '}
+                  {(filledSubheadings.length * sectionCharRange.min).toLocaleString()}~
+                  {(filledSubheadings.length * sectionCharRange.max).toLocaleString()}자로 쓰여요
+                </p>
               )}
             </div>
 
@@ -324,15 +476,21 @@ export function ExpertModeTab({
               )}
             </div>
 
-            {/* 글 길이 선택 */}
+            {/* 글 길이 선택 — 소제목 하나당 분량으로 정합니다 */}
             <div>
-              <h3 className="text-lg font-semibold mb-3">📏 글 길이 선택</h3>
+              <h3 className="text-lg font-semibold mb-3">📏 소제목당 분량</h3>
+              <p className="text-sm text-gray-600 mb-3">
+                전체 길이는 <strong>소제목 개수 × 소제목당 분량</strong>으로 결정됩니다.
+              </p>
               <div className="grid grid-cols-3 gap-3">
-                {[
-                  { value: 'short', label: '짧은 글', desc: '1500-2000자' },
-                  { value: 'medium', label: '중간 글', desc: '2000-2500자' },
-                  { value: 'long', label: '긴 글', desc: '2500-3000자' },
-                ].map((opt) => (
+                {([
+                  { value: 'short', label: '짧게' },
+                  { value: 'medium', label: '보통' },
+                  { value: 'long', label: '길게' },
+                ] as const).map((opt) => ({
+                  ...opt,
+                  desc: `소제목당 ${SECTION_CHAR_RANGE[opt.value].min}-${SECTION_CHAR_RANGE[opt.value].max}자`,
+                })).map((opt) => (
                   <button
                     key={opt.value}
                     onClick={() => onLengthChange(opt.value as 'short' | 'medium' | 'long')}
@@ -348,9 +506,32 @@ export function ExpertModeTab({
                   </button>
                 ))}
               </div>
-              <p className="text-sm text-gray-600 mt-2">
-                선택됨: <strong>{length === 'short' ? '짧은 글 (1500-2000자)' : length === 'medium' ? '중간 글 (2000-2500자)' : '긴 글 (2500-3000자)'}</strong>
-              </p>
+              {/* 전체 글 분량 — 소제목 개수 × 소제목당 분량으로 결정됩니다 */}
+              <div className="mt-3 p-4 rounded-lg border-2 border-primary/30 bg-primary/5">
+                <p className="text-sm text-gray-600">📐 전체 글 분량</p>
+                {filledSubheadings.length > 0 ? (
+                  <>
+                    <p className="text-2xl font-bold text-primary mt-1">
+                      약 {(filledSubheadings.length * sectionCharRange.min).toLocaleString()}~
+                      {(filledSubheadings.length * sectionCharRange.max).toLocaleString()}자
+                    </p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      소제목 {filledSubheadings.length}개 × 소제목당 {sectionCharRange.min}~
+                      {sectionCharRange.max}자
+                      {filledSubheadings.length < MIN_SUBHEADINGS &&
+                        ` (소제목 ${MIN_SUBHEADINGS}개 이상 필요)`}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-2">
+                      더 긴 글을 원하시면 소제목을 늘리거나 위에서 &lsquo;길게&rsquo;를 선택하세요.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-500 mt-1">
+                    소제목을 입력하면 전체 분량이 계산됩니다 (소제목 개수 × {sectionCharRange.min}~
+                    {sectionCharRange.max}자)
+                  </p>
+                )}
+              </div>
             </div>
           </div>
 

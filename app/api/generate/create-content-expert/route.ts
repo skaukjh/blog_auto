@@ -3,8 +3,28 @@ import { isValidExpertType } from '@/lib/experts/definitions';
 import blogStyleCache from '@/lib/utils/blog-style-memory-cache';
 import { getBlogStyleFromSupabase } from '@/lib/utils/style-storage';
 import { getWritingGuide } from '@/lib/utils/writing-guide-storage';
+import { MAX_SUBHEADINGS, MIN_SUBHEADINGS } from '@/lib/utils/outline';
+import { toKrw } from '@/lib/openai/pricing';
 import { ExpertCreateContentResponse, StyleScope } from '@/types';
 import { NextRequest, NextResponse } from 'next/server';
+
+/** 실패 응답을 만드는 도우미 (본문 형태를 매번 반복하지 않기 위해) */
+function errorResponse(message: string, status: number) {
+  return NextResponse.json(
+    {
+      success: false,
+      content: {
+        content: '',
+        imageGuides: [],
+        wordCount: 0,
+        keywordCounts: {},
+      },
+      expertType: 'restaurant',
+      error: message,
+    } as ExpertCreateContentResponse,
+    { status }
+  );
+}
 
 /**
  * 이 전문가의 학습된 문체를 가져옵니다.
@@ -29,7 +49,8 @@ async function loadStyleGuide(scope: StyleScope): Promise<string | null> {
  *
  * Request:
  * {
- *   topic: string,
+ *   title: string,                 // 글 제목 - 토씨 하나 바꾸지 않고 글에 그대로 들어갑니다
+ *   subheadings: string[],         // 소제목 3~10개 - 순서·표기 그대로, 각 소제목 밑에 해당 내용
  *   length: 'short' | 'medium' | 'long',
  *   keywords: { text: string, count: number }[],
  *   imageAnalysis: ImageAnalysisResult,
@@ -47,7 +68,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExpertCre
   try {
     const body = await request.json();
     const {
-      topic,
+      title,
+      subheadings,
       length,
       keywords,
       imageAnalysis,
@@ -61,20 +83,22 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExpertCre
       personalExperience,
     } = body;
 
-    if (!topic || !length || !keywords || !imageAnalysis || !expertType || !modelConfig) {
-      return NextResponse.json(
-        {
-          success: false,
-          content: {
-            content: '',
-            imageGuides: [],
-            wordCount: 0,
-            keywordCounts: {},
-          },
-          expertType: 'restaurant',
-          error: '필수 파라미터가 부족합니다',
-        } as ExpertCreateContentResponse,
-        { status: 400 }
+    if (!title || !length || !keywords || !imageAnalysis || !expertType || !modelConfig) {
+      return errorResponse('필수 파라미터가 부족합니다', 400);
+    }
+
+    // 소제목은 글의 골격이므로 개수를 서버에서도 확인합니다.
+    const cleanSubheadings: string[] = Array.isArray(subheadings)
+      ? subheadings.map((s: unknown) => String(s ?? '').trim()).filter(Boolean)
+      : [];
+
+    if (
+      cleanSubheadings.length < MIN_SUBHEADINGS ||
+      cleanSubheadings.length > MAX_SUBHEADINGS
+    ) {
+      return errorResponse(
+        `소제목은 ${MIN_SUBHEADINGS}~${MAX_SUBHEADINGS}개를 입력해야 합니다 (현재 ${cleanSubheadings.length}개)`,
+        400
       );
     }
 
@@ -96,8 +120,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExpertCre
     }
 
     // 전문가 콘텐츠 생성
-    const content = await generateBlogContentExpert(
-      topic,
+    const content = await generateBlogContentExpert({
+      title,
+      subheadings: cleanSubheadings,
       length,
       keywords,
       imageAnalysis,
@@ -109,57 +134,44 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExpertCre
       endSentence,
       placeInfo,
       styleGuide,
-      writingGuide?.guide ?? null,
+      writingGuide: writingGuide?.guide ?? null,
       // 가이드가 종결어미를 지배하도록 설정된 경우, 학습 문체보다 우선합니다.
-      writingGuide?.endingPattern ?? null,
+      forcedEnding: writingGuide?.endingPattern ?? null,
       // 사용자가 직접 입력한 실제 경험 — 빠짐없이 글에 반영됩니다.
-      personalExperience ?? null
+      personalExperience: personalExperience ?? null,
+    });
+
+    // 실제 비용 계산.
+    //
+    // 과거에는 입력·출력 토큰을 2000으로 하드코딩해 추정했기 때문에 화면 금액이
+    // 실제 청구액과 무관했습니다. 지금은 두 단계 모두 응답의 usage를 그대로 씁니다.
+    // (이미지 분석 usage는 클라이언트가 분석 응답에서 받아 그대로 넘겨줍니다.)
+    const imageUsd = imageAnalysis?.usage?.usd ?? 0;
+    const contentUsd = content.usage?.usd ?? 0;
+    const totalUsd = imageUsd + contentUsd;
+
+    console.log(
+      `💸 실제 비용: 이미지 ${toKrw(imageUsd)}원 + 본문 ${toKrw(contentUsd)}원 = ${toKrw(totalUsd)}원` +
+        ` (본문 ${content.usage?.inputTokens ?? 0}in/${content.usage?.outputTokens ?? 0}out 토큰, ${content.wordCount}자)`
     );
-
-    // 비용 추정 (대략값)
-    const inputTokens = 2000;
-    const outputTokens = 2000;
-    let costUsd = 0;
-
-    // 모델별 가격 추정
-    if (modelConfig.contentGenerationModel.includes('gpt-5')) {
-      costUsd = (inputTokens / 1000000) * 5 + (outputTokens / 1000000) * 15;
-    } else if (modelConfig.contentGenerationModel.includes('gpt-4')) {
-      costUsd = (inputTokens / 1000000) * 2.5 + (outputTokens / 1000000) * 10;
-    } else if (modelConfig.contentGenerationModel.includes('claude')) {
-      costUsd = (inputTokens / 1000000) * 15 + (outputTokens / 1000000) * 75;
-    } else if (modelConfig.contentGenerationModel.includes('gemini')) {
-      costUsd = (inputTokens / 1000000) * 1.25 + (outputTokens / 1000000) * 5;
-    }
-
-    const costKrw = Math.round(costUsd * 1300); // 환율: 1 USD = 1,300 KRW
 
     return NextResponse.json({
       success: true,
       content,
       expertType,
       cost: {
-        usd: costUsd,
-        krw: costKrw,
+        usd: totalUsd,
+        krw: toKrw(totalUsd),
+        breakdown: {
+          imageAnalysis: { usd: imageUsd, krw: toKrw(imageUsd) },
+          contentGeneration: { usd: contentUsd, krw: toKrw(contentUsd) },
+        },
       },
     });
   } catch (error) {
     console.error('Expert content generation API error:', error);
     const errorMessage = error instanceof Error ? error.message : '콘텐츠 생성 중 오류가 발생했습니다';
 
-    return NextResponse.json(
-      {
-        success: false,
-        content: {
-          content: '',
-          imageGuides: [],
-          wordCount: 0,
-          keywordCounts: {},
-        },
-        expertType: 'restaurant',
-        error: errorMessage,
-      } as ExpertCreateContentResponse,
-      { status: 500 }
-    );
+    return errorResponse(errorMessage, 500);
   }
 }

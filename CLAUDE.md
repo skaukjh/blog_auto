@@ -111,13 +111,47 @@ npm run build       # 프로덕션 빌드
       → 메모리 캐시(expert별) + Supabase blog_styles(expert_id) + Assistant instruction
 
 /generate (ExpertModeTab 단일 진입점)
+  → 입력: 제목 1개 + 소제목 3~10개 + 이미지 + 키워드 + 직접 경험 (주제 입력창은 제거됨)
+  → 입력·결과를 IndexedDB에 자동 저장 (lib/utils/draft-storage.ts)
   → 클라이언트 압축 (canvas, 최대 1280px, JPEG 75%)
-  → POST /api/generate/analyze-images-expert   (5장씩 배치, detail: "high")
+  → POST /api/generate/analyze-images-expert   (5장씩 배치, detail: "high", topic 자리에 제목)
   → POST /api/generate/create-content-expert   (웹검색·추천·가게정보 통합)
-      선택한 전문가의 문체를 조회해 generateBlogContentExpert(styleGuide)로 전달
+      선택한 전문가의 문체를 조회해 generateBlogContentExpert({ title, subheadings, styleGuide, ... })로 전달
+      생성 후 enforceOutline()으로 제목·소제목을 입력 원문으로 교정
   → 결과 표시 → POST /api/generate/refine-content (대화형 부분 수정)
   → TXT 다운로드 / 클립보드 복사
 ```
+
+### 제목·소제목 골격 (2026-07-25 사용자 결정)
+
+주제 입력창은 없어졌습니다. 대신 **제목 1개**와 **소제목 3~10개**를 따로 입력하며, 둘 다
+**토씨 하나 바꾸지 않고** 최종 글에 그대로 들어갑니다. 각 소제목 밑에는 그 소제목에
+해당하는 내용만 옵니다(소제목이 "위치"면 그 아래는 위치 이야기).
+
+- 개수 상수와 소제목당 분량은 `lib/utils/outline.ts` 한 곳에 있습니다
+  (`MIN_SUBHEADINGS`/`MAX_SUBHEADINGS`/`SECTION_CHAR_RANGE`). 프롬프트와 화면 안내가 같은 값을 봅니다
+- **분량은 소제목당 400~600자**(짧게 400-450 / 보통 450-530 / 길게 530-600)이고,
+  **글 전체 길이는 `소제목 개수 × 소제목당 분량`으로 결정됩니다.** 전체 분량을 직접 입력하는
+  칸은 없고, 화면에 계산 결과를 강조 박스로 보여줍니다. 더 긴 글은 소제목을 늘려서 만듭니다
+  (2026-07-25: 처음 300~500으로 잡았다가 사용자 요청으로 소제목당 100자씩 올림)
+- 종결어미와 같은 방식으로, **지켜야 하는 규칙은 LLM에 맡기지 않고 코드가 확정합니다.**
+  `enforceOutline()`이 `## `·번호·괄호 같은 장식을 벗겨 원문으로 되돌리고, 글자가 실제로
+  바뀐 소제목은 임의로 덮어쓰지 않고 `missingSubheadings`로 보고해 화면에 경고를 띄웁니다
+- ⚠️ PRIORITY 3의 "소제목 금지" 규칙은 소제목이 입력됐을 때만 **조건부로 무효화**됩니다.
+  글쓰기 가이드의 소제목 금지 문구도 같이 조건부입니다. 한쪽만 고치면 서로 충돌합니다
+
+### 작업물 자동 저장 (IndexedDB)
+
+`lib/utils/draft-storage.ts`가 입력값과 생성 결과를 브라우저 IndexedDB에 자동 저장합니다.
+과거에는 실수로 창을 닫으면 업로드한 사진·제목·소제목·경험글이 전부 날아갔고, 비용을 들여
+만든 글도 복구할 수 없었습니다.
+
+- 입력 초안은 1초 디바운스로 저장하고, 생성 결과는 생성 직후 즉시 저장합니다
+- 사진은 `File` 객체를 구조화 복제로 그대로 저장하므로 복구 후 재생성도 됩니다.
+  저장이 거부되면 사진만 빼고 텍스트라도 남기도록 한 번 더 시도합니다
+- `/generate` 재방문 시 복구 배너가 뜹니다. "새로 시작하기"는 초안만 지우고
+  **저장된 생성 글은 지우지 않습니다**(실수로 글을 날리지 않도록)
+- ⚠️ localStorage로 되돌리지 마세요. 5MB 제한과 문자열 전용이라 사진이 들어가지 않습니다
 
 보조 데이터 소스:
 
@@ -159,6 +193,20 @@ npm run build       # 프로덕션 빌드
 3. 자연스러운 톤
 4. 기술 요구사항 (마커·키워드)
 5. 품질·가독성
+6. 글 구조 (참고 자료 가이드)
+
+### 시적·음유적 표현 금지 (2026-07-25 사용자 지시)
+
+생성된 글이 "시 같다"는 지적이 있었습니다(`골목을 걷다가 ... 괜히 발걸음이 느려져요`,
+`노란 조명이 포근하게 비쳐요`, `오랜 시간 이 골목을 지켜온 동네 식당 같은 친근함`).
+**친근한 구어체가 기본이고, 분위기를 묘사하는 문학적 문장은 금지입니다.**
+
+- PRIORITY 3에 금지 패턴을 예시째로 박아 두었습니다(장면 묘사·분위기 형용·질감 묘사,
+  추상명사를 주어로 쓰기, `괜히`/`왠지` 같은 무드용 부사). Bad/Good 대조 예시도 함께 있습니다
+- ⚠️ 창의성 슬라이더 높은 값의 지시문에서 **"bold imagery"를 되살리지 마세요.** 그 문구가
+  시적 표현의 원인이었습니다. 지금은 "창의성이 높다 = 개성과 구체성이 더 많다, 비유가
+  많아지는 게 아니다"로 바꿔 두었습니다
+- 사물을 묘사할 때는 분위기가 아니라 실제로 있는 것을 쓰게 합니다(테이블 개수, 화로, 메뉴판)
 
 ### 마커 시스템
 
@@ -291,6 +339,11 @@ node automation/scripts/verify-supabase.mjs
 
 | 작업 | 파일 |
 |---|---|
+| 소제목 개수/분량 조정 | `lib/utils/outline.ts` (`MIN_SUBHEADINGS`·`MAX_SUBHEADINGS`·`SECTION_CHAR_RANGE`) — 프롬프트·UI 공용 |
+| 제목·소제목 강제 로직 | `lib/utils/outline.ts` `enforceOutline()` |
+| 자동 저장/복구 | `lib/utils/draft-storage.ts` + `generate/page.tsx` 복구 배너 |
+| 모델 단가 추가·수정 | `lib/openai/pricing.ts` `MODEL_PRICING` |
+| 모델 프리셋 | `components/expert/ModelSelector.tsx` `PRESET_CONFIGS` (기본값은 `ExpertModeTab`의 `modelConfig` 초기값과 일치시켜야 함) |
 | 보호 경로 추가 | `middleware.ts` `protectedPaths` |
 | 전문가 추가/수정 | `lib/experts/definitions.ts` + `lib/experts/prompts.ts` (+ `blog_styles.expert_id` 값이 늘어남) |
 | 문체 예시글 개수 조정 | `lib/openai/blog-analyzer.ts` `MIN_STYLE_SAMPLES`/`MAX_STYLE_SAMPLES` + `format/page.tsx` |
@@ -323,7 +376,10 @@ node automation/scripts/verify-supabase.mjs
 ### 해결된 이슈
 
 - `lib/openai/client.ts`의 가짜 모델명(`gpt-5.2`, `claude-opus-4-6`, `gemini-3-pro` 등)은 `7424835`에서 제거됐습니다. 현재 실재 모델은 `gpt-5.6-sol` / `gpt-5.6-terra` / `gpt-5.6-luna` / `gpt-4o` 계열입니다. **모델을 추가할 때는 반드시 `GET /v1/models`로 실재 여부를 먼저 확인하세요.** GPT-5 계열은 `max_tokens`/`temperature`를 거부하며 `buildChatParams()`가 이를 흡수합니다.
-- **기본 모델은 `gpt-5.6-terra`입니다**(2026-07-24 비용 절감). 이미지 분석·본문 생성 모두 terra. 공식 단가(1M 토큰): sol $5/$30, terra $2.5/$15, luna $1/$6 — **terra는 sol의 정확히 절반**. 글 1편(이미지 5~9장) 약 140원. UI 모델 선택에서 sol(최고품질)로 개별 지정 가능.
+- **모델 기본값(2026-07-25, 글당 100원 목표)**: 이미지 분석 `gpt-5.6-luna` + 본문 생성 `gpt-5.6-terra`. 공식 단가(1M 토큰): sol $5/$30, terra $2.5/$15, luna $1/$6. 글의 질을 좌우하는 본문만 terra로 두고 나머지를 luna로 내렸습니다. 이미지 묘사가 얕으면 UI 고급 설정에서 이미지 분석만 terra로 올리세요.
+- **UI 모델 프리셋은 균형형·절약형 2개뿐입니다.** 최고 품질(sol) 프리셋은 2026-07-25 사용자 요청으로 제거했습니다. 되살리기 전에 확인하세요.
+- **비용 표시는 실측값입니다.** 과거에는 각 라우트가 `inputTokens = 2000` 같은 하드코딩으로 추정해 화면 금액이 실제 청구액과 무관했습니다. 이제 `lib/openai/pricing.ts`의 단가표에 응답 `usage`를 적용합니다. 모델을 추가하면 `MODEL_PRICING`에 단가도 등록하세요.
+- **이미지 분석의 중복 호출을 제거했습니다**(2026-07-25). 배치 응답 JSON에 이미 `overall`이 들어 있는데 그것을 버리고 이미지 3장을 다시 보내 한 번 더 분석했습니다. 같은 사진을 두 번 업로드하는 셈이라 입력 토큰만 더 들었습니다. 되돌리지 마세요.
 
 ---
 

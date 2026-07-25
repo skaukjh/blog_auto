@@ -29,8 +29,15 @@ export type OpenAIModelId = (typeof OPENAI_MODELS)[keyof typeof OPENAI_MODELS];
 // 비용 절감(2026-07-24 사용자 요청): 최고 성능 sol 대신 균형 모델 terra를 기본으로 씁니다.
 // sol이 필요하면 UI의 모델 선택에서 개별 지정할 수 있습니다.
 
-/** 이미지 분석 기본 모델 */
-export const IMAGE_ANALYSIS_MODEL: OpenAIModelId = OPENAI_MODELS.GPT_5_6_TERRA;
+/**
+ * 이미지 분석 기본 모델
+ *
+ * 2026-07-25 추가 절감(글당 100원 목표): terra → luna.
+ * 이미지 분석은 "보이는 것을 적는" 작업이라 본문 생성보다 추론 부담이 작고,
+ * 단가는 terra의 40%입니다(입력 $1 vs $2.5, 출력 $6 vs $15).
+ * 묘사가 얕게 느껴지면 UI 모델 설정에서 이 단계만 terra로 올릴 수 있습니다.
+ */
+export const IMAGE_ANALYSIS_MODEL: OpenAIModelId = OPENAI_MODELS.GPT_5_6_LUNA;
 
 /** 콘텐츠 생성 기본 모델 */
 export const CONTENT_MODEL: OpenAIModelId = OPENAI_MODELS.GPT_5_6_TERRA;

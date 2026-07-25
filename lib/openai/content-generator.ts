@@ -9,6 +9,8 @@ import {
 import { CONTENT_GENERATOR_SYSTEM_PROMPT } from "./prompts";
 import { getExpertPrompt } from "@/lib/experts/prompts";
 import { parseMarkers } from "@/lib/utils/marker-parser";
+import { enforceOutline, isHeadingLine, SECTION_CHAR_RANGE } from "@/lib/utils/outline";
+import { extractUsage } from "./pricing";
 import type {
   GeneratedContentWithImages,
   ImageAnalysisResult,
@@ -252,41 +254,47 @@ Examples: 좋았어요, 추천해요, 방문했어요
 NEVER use: ~~다, ~~한다, ~~했다`;
 }
 
-/**
- * Phase 20: 전문가 기반 블로그 콘텐츠 생성
- * 웹 검색 결과와 추천 정보를 통합합니다
- */
-export async function generateBlogContentExpert(
-  topic: string,
-  length: "short" | "medium" | "long",
-  keywords: KeywordItem[],
-  imageAnalysis: ImageAnalysisResult,
-  expertType: ExpertType,
-  modelConfig: ModelConfig,
-  webSearchResults?: WebSearchResult[],
-  recommendations?: RecommendationItem[],
-  startSentence?: string,
-  endSentence?: string,
-  placeInfo?: PlaceInfo,
+/** 전문가 글 생성 입력. 인자가 많아 객체로 받습니다. */
+export interface GenerateExpertContentParams {
+  /**
+   * 사용자가 입력한 제목. **토씨 하나 바꾸지 않고** 글의 첫 줄에 그대로 들어갑니다.
+   * 이미지 분석·웹 검색의 주제 역할도 겸합니다(과거 `topic` 자리).
+   */
+  title: string;
+  /**
+   * 사용자가 입력한 소제목 목록(3~10개). 순서·표기 그대로 글에 들어가고,
+   * 각 소제목 밑에는 그 소제목에 해당하는 본문만 씁니다.
+   */
+  subheadings: string[];
+  length: "short" | "medium" | "long";
+  keywords: KeywordItem[];
+  imageAnalysis: ImageAnalysisResult;
+  expertType: ExpertType;
+  modelConfig: ModelConfig;
+  webSearchResults?: WebSearchResult[];
+  recommendations?: RecommendationItem[];
+  startSentence?: string;
+  endSentence?: string;
+  placeInfo?: PlaceInfo;
   /**
    * /format 에서 학습한 이 전문가의 문체 가이드.
    * 없으면 전문가 페르소나의 기본 톤만으로 생성합니다.
    */
-  styleGuide?: string | null,
+  styleGuide?: string | null;
   /**
    * 참고 자료(전자책·프롬프트 자료집)를 분석해 둔 글 구조 가이드.
    *
    * 문체(styleGuide)와 역할이 다릅니다. 이쪽은 "어떤 구조로 쓰는가"를 담습니다.
    * 없으면 구조 지시 없이 생성합니다.
    */
-  writingGuide?: string | null,
+  writingGuide?: string | null;
   /**
    * 글쓰기 가이드가 강제하는 종결어미('요'|'다').
    *
    * 사용자 결정(2026-07-24): 이 값이 있으면 **학습된 전문가 문체의 어미를 무시하고**
    * 모든 글을 이 어미로 씁니다. null이면 학습 문체를 따릅니다.
    */
-  forcedEnding?: "요" | "다" | null,
+  forcedEnding?: "요" | "다" | null;
   /**
    * 사용자가 직접 입력한 "내가 실제로 경험한 내용".
    *
@@ -294,8 +302,38 @@ export async function generateBlogContentExpert(
    * 요약·재구성은 허용하되 **여기 담긴 정보는 하나도 빠짐없이** 최종 글에 반영해야 합니다.
    * 글자 수 제한은 없습니다.
    */
-  personalExperience?: string | null
+  personalExperience?: string | null;
+}
+
+/**
+ * Phase 20: 전문가 기반 블로그 콘텐츠 생성
+ * 웹 검색 결과와 추천 정보를 통합합니다
+ */
+export async function generateBlogContentExpert(
+  params: GenerateExpertContentParams
 ): Promise<GeneratedContentWithImages> {
+  const {
+    title,
+    subheadings,
+    length,
+    keywords,
+    imageAnalysis,
+    expertType,
+    modelConfig,
+    webSearchResults,
+    recommendations,
+    startSentence,
+    endSentence,
+    placeInfo,
+    styleGuide,
+    writingGuide,
+    forcedEnding,
+    personalExperience,
+  } = params;
+
+  // 제목은 기존 topic이 하던 "이 글이 무엇에 관한 글인가" 역할도 겸합니다.
+  const topic = title;
+
   try {
     const expertPrompt = getExpertPrompt(expertType);
     const modelName = resolveModel(modelConfig.contentGenerationModel, CONTENT_MODEL);
@@ -311,15 +349,19 @@ ${
     ? "Stay close to the source material. Use plain, predictable phrasing and avoid embellishment."
     : modelConfig.creativity <= 7
       ? "Balance faithfulness with lively expression. Vary sentence rhythm naturally."
-      : "Be vivid and expressive. Use bold imagery and varied sentence structure, but never invent facts that are not visible in the images or provided data."
+      : "Be lively and talkative - vary sentence length and rhythm a lot, and let your opinions come through strongly. Higher creativity means MORE personality and MORE concrete detail, NOT more figurative language. Never drift into poetic or literary phrasing, and never invent facts that are not visible in the images or provided data."
 }`;
 
-    // 기본 설정
+    // 목표 글자 수.
+    // 2026-07-25 사용자 요청으로 세 단계 모두 1000자씩 올렸습니다.
     const charCount = {
-      short: "1500-2000",
-      medium: "2000-2500",
-      long: "2500-3000",
+      short: "2500-3000",
+      medium: "3000-3500",
+      long: "3500-4000",
     }[length];
+
+    // 소제목 한 개당 본문 분량 (기준값은 lib/utils/outline.ts 한 곳에서 관리)
+    const sectionChars = SECTION_CHAR_RANGE[length];
 
     const keywordList = keywords.map((k) => `${k.text} (${k.count}회)`).join(", ");
     const imageCount = imageAnalysis.images.length;
@@ -368,13 +410,71 @@ ${idx + 1}. ${rec.title} (${rec.type})
 CRITICAL: Weave these recommendations naturally into your content.`
     }
 
+    // 제목·소제목 골격.
+    //
+    // 사용자가 정한 제목과 소제목은 협상 대상이 아닙니다. 글자 하나도 바꾸지 않고
+    // 그대로 들어가야 하며, 각 소제목 밑에는 그 소제목에 해당하는 내용만 옵니다.
+    // 생성 후에도 enforceOutline()으로 코드가 다시 강제합니다.
+    const cleanSubheadings = subheadings.map((s) => s.trim()).filter(Boolean);
+    const hasOutline = cleanSubheadings.length > 0;
+
+    let outlineSection = "";
+    if (hasOutline) {
+      const totalMin = sectionChars.min * cleanSubheadings.length;
+      const totalMax = sectionChars.max * cleanSubheadings.length;
+
+      outlineSection = `
+
+⚠️⚠️ MANDATORY POST SKELETON (HIGHEST STRUCTURAL PRIORITY)
+The author has already decided the title and every subheading. These are FIXED TEXT,
+not suggestions.
+
+TITLE (must be the very first line of your output, copied character-for-character):
+${title}
+
+SUBHEADINGS — use ALL ${cleanSubheadings.length}, in exactly this order, each alone on its own line:
+${cleanSubheadings.map((sub, idx) => `${idx + 1}. ${sub}`).join("\n")}
+
+ABSOLUTE RULES FOR THE SKELETON:
+- Copy the title and every subheading EXACTLY as written above. Do not change a single
+  character: no rewording, no synonyms, no added or removed particles (조사), no changed
+  spacing inside words, no punctuation added or removed, no translation, no shortening.
+- Write each subheading on its own line, as PLAIN TEXT ONLY. Do NOT decorate it with
+  #, ##, **, 【 】, [ ], quotation marks, numbers, bullets, or a trailing colon.
+  The numbers "1." above are only to show you the order — do NOT write them in the post.
+- Do NOT invent extra subheadings, and do NOT merge, split, reorder, or skip any.
+- ⭐ MATCH THE CONTENT TO THE SUBHEADING. Read each subheading literally and write about
+  EXACTLY what it announces. Nothing else belongs in that section:
+  · a subheading about 위치 / 찾아가는 길 → where it is, the nearest station or landmark,
+    how you got there, parking, how long it took
+  · a subheading about 가격 / 비용 → what things cost and whether it felt worth it
+  · a subheading about 메뉴 / 구성품 → the actual items, and your reaction to them
+  · a subheading about 후기 / 재방문 → your verdict and whether you'd go back
+  If a subheading names a specific thing, that section is ABOUT that thing. Never write
+  generic filler that could sit under any subheading, and never answer a subheading's
+  topic in a different section.
+- LENGTH PER SECTION: each section's body must be ${sectionChars.min}-${sectionChars.max} Korean characters
+  (about 2-3 paragraphs). Not one long section and the rest short — keep them balanced.
+  With ${cleanSubheadings.length} subheadings the whole post lands around ${totalMin}-${totalMax} characters.
+  Do not pad a section with empty phrasing to hit the number, and do not cut a section short.
+- Put a blank line between the end of one section and the next subheading.
+- The title line itself carries no body text.
+- Sections flow as one continuous post: the reader should feel a single story moving
+  forward, not ${cleanSubheadings.length} disconnected mini-posts.`;
+    }
+
     // User Prompt 생성
     let userPrompt = `Generate a Korean blog post by an expert ${expertType} blogger with the following specifications:
 
-Topic: ${topic}
-Character count: ${charCount} characters (Korean characters, not words)
+Title (also the subject of this post): ${topic}
+Character count: ${
+      hasOutline
+        ? `${sectionChars.min * cleanSubheadings.length}-${sectionChars.max * cleanSubheadings.length} characters total ` +
+          `(= ${cleanSubheadings.length} sections x ${sectionChars.min}-${sectionChars.max} characters each)`
+        : `${charCount} characters`
+    } (Korean characters, not words)
 Length: ${length}
-Expert Style: ${expertType} blogger persona
+Expert Style: ${expertType} blogger persona${outlineSection}
 
 Keywords to include naturally (${keywords.length} total):
 ${keywordList}
@@ -388,7 +488,14 @@ ${keywordList}
 - TOTAL IMAGES: ${imageCount}
 - Use EXACTLY ${imageCount} image marker(s): ${Array.from({ length: imageCount }, (_, i) => `[IMAGE_${i + 1}]`).join(", ")}
 - RULE: Place [IMAGE_N] markers where they fit the NARRATIVE FLOW naturally
-- Each marker MUST have 1-2 sentences of RELATED context before and after it
+- Each marker MUST have 1-2 sentences of RELATED context before and after it${
+      hasOutline
+        ? `
+- Spread the markers across the sections so no section is left without a photo
+- NEVER put a marker on the same line as a subheading, and never directly above or
+  below a subheading line — a marker always sits inside the body text of a section`
+        : ""
+    }
 
 Image context and placement guide:
 - Theme: ${imageAnalysis.overall.theme}
@@ -482,10 +589,38 @@ PRIORITY 2 - IMAGE-BASED DESCRIPTIONS:
 PRIORITY 3 - SOUND LIKE A REAL PERSON, NOT AI (VERY IMPORTANT):
 - Default to a warm, casual, friendly voice — like telling a close friend about
   something you actually bought and used. This friendly tone is the baseline for
-  every post, regardless of topic.
-- ⛔ NO section headings or sub-titles. Do NOT write lines like "첫인상을 살펴봐요",
+  every post, regardless of topic. It is not optional and it never gets replaced by a
+  more "writerly" voice.
+- ⛔⛔ ABSOLUTELY NO POETIC, LYRICAL, OR LITERARY WRITING. This is the #1 failure mode.
+  You are not writing an essay, a novel, or a poem. Never set a mood; just tell what
+  happened. These exact patterns are BANNED — do not write anything resembling them:
+  · wandering scene-setting: "골목을 걷다가 ... 괜히 발걸음이 느려져요",
+    "따뜻한 불빛이 보이면", "노란 조명이 포근하게 비쳐요"
+  · atmosphere feelings in place of facts: "오랜 시간 이 골목을 지켜온 동네 식당 같은
+    친근함이 느껴졌어요", "구이의 흐름을 지켜보고 싶은 날 있잖아요"
+  · material/texture poetry: "짙은 벽돌과 콘크리트 질감의 외벽 위로",
+    "질감이 어우러져요", "빛이 스며들어요"
+  · abstract nouns as the subject of a sentence (현장감, 여백, 정취, 무드, 온기, 결)
+  · dreamy connectors and trailing effect: "괜히", "왠지", "~하는 날 있잖아요" used to
+    create mood rather than state a fact
+- Write CONCRETE sentences instead: what you did, what you ate, what it cost, how long
+  you waited, what was actually in front of you, what you thought of it.
+  Bad:  "회색빛 벽돌 건물 사이로 따뜻한 불빛이 보이면 괜히 발걸음이 느려져요."
+  Good: "성수역에서 5분쯤 걸어가니까 가게 앞에 숯불 연기가 올라오고 있었어요."
+  Bad:  "노란 조명이 포근하게 비쳐요."
+  Good: "안에 들어가니까 4인 테이블이 여덟 개쯤 있고 자리마다 화로가 놓여 있었어요."
+- Describe THINGS, not moods. If you mention the interior, say what is actually there
+  (테이블 개수, 화로, 메뉴판, 반찬 종류) — not how the light made you feel.
+${
+      hasOutline
+        ? `- ⛔ The ONLY headings allowed are the author's ${cleanSubheadings.length} subheadings listed in the
+  MANDATORY POST SKELETON, copied verbatim. Do NOT invent any heading of your own
+  (no "첫인상을 살펴봐요" style lines), and do NOT add sub-sub-headings or bullet lists.
+  Inside each section, write connected paragraphs that flow naturally.`
+        : `- ⛔ NO section headings or sub-titles. Do NOT write lines like "첫인상을 살펴봐요",
   "구성품을 확인해요", "디자인과 마감을 봐요". The post must read as connected
-  paragraphs that flow naturally, not a list of labeled sections.
+  paragraphs that flow naturally, not a list of labeled sections.`
+    }
 - Kill the "AI smell": AI writing gives itself away by (a) hedging in every
   paragraph ("사진만으로 판단하기 어려워요", "확인되지 않아요"), (b) a mechanical
   rhythm where every sentence is the same length and shape, (c) textbook connectors
@@ -507,8 +642,9 @@ PRIORITY 3 - SOUND LIKE A REAL PERSON, NOT AI (VERY IMPORTANT):
 - Listing the parts / 구성품 is totally fine (쿠션 2개, 볼트, 육각렌치, 설명서 등).
   Just don't leave it as a cold inventory — add a quick reaction or what you did with
   them ("볼트가 딱 4개라 잃어버릴 일 없어 좋았어요").
-- Open with a concrete, personal moment or scene — not a generic problem statement
-  everyone already knows.
+- Open with a concrete fact or action from your own visit/use — where you went, what you
+  ordered, why you picked it. NOT a generic problem statement everyone already knows,
+  and NOT an atmospheric scene ("골목을 걷다가...", "불빛이 보이면...").
 - Vary how you end. Avoid formulaic closers like "~될 거예요", "고려해 볼 만해요"
   repeated as a template. End the way a real person would trail off after a review.
 - Use everyday spoken Korean, not formal report language.
@@ -551,8 +687,15 @@ HOW TO APPLY THIS SECTION:
 - These are STRUCTURAL rules: what to cover, what facts to include, how to close.
 - The sentence ending is fixed by PRIORITY 1 above. If this section's tone hints at a different
   ending, follow PRIORITY 1 for endings and take only the structure from here.
-- ⛔ Even if this section suggests using sub-headings/소제목, DO NOT add them. PRIORITY 3's
-  "no headings, natural flow" rule wins. Cover the same points as flowing paragraphs instead.
+${
+      hasOutline
+        ? `- ⛔ The subheadings are already fixed by the author (see MANDATORY POST SKELETON). If this
+  section suggests different, extra, or differently-worded headings, IGNORE that completely
+  and keep the author's subheadings verbatim. Fold this section's points into the body text
+  under whichever of the author's subheadings fits best.`
+        : `- ⛔ Even if this section suggests using sub-headings/소제목, DO NOT add them. PRIORITY 3's
+  "no headings, natural flow" rule wins. Cover the same points as flowing paragraphs instead.`
+    }
 - Do not invent facts to satisfy a structural rule. If a required detail (price, distance,
   time) is not present in the provided images or supplied data, omit it rather than guess.`;
     }
@@ -590,16 +733,35 @@ notice; the guide governs how the sentences sound.`
       throw new Error("콘텐츠 생성 응답을 받을 수 없습니다");
     }
 
+    // 제목·소제목을 입력 원문으로 교정합니다.
+    //
+    // 프롬프트로 "그대로 쓰라"고 지시해도 모델이 "## "를 붙이거나 번호를 매기는 일이
+    // 있습니다. 그런 장식은 여기서 벗겨 원문으로 되돌립니다. 반대로 글자 자체가
+    // 바뀐 소제목은 임의로 만들어 넣지 않고 누락으로 보고합니다.
+    let missingSubheadings: string[] = [];
+    if (title.trim() || hasOutline) {
+      const enforced = enforceOutline(content, title, cleanSubheadings);
+      content = enforced.content;
+      missingSubheadings = enforced.missingSubheadings;
+
+      if (enforced.titleInserted) {
+        console.warn("⚠️ 생성된 글에 제목이 없어 첫 줄에 넣었습니다");
+      }
+      if (missingSubheadings.length > 0) {
+        console.warn(
+          `⚠️ 그대로 들어가야 할 소제목 ${missingSubheadings.length}개를 글에서 찾지 못했습니다: ${missingSubheadings.join(" / ")}`
+        );
+      }
+    }
+
     // 마커 검증
     const expectedMarkerCount = imageAnalysis.images.length;
-    let markers = parseMarkers(content);
+    const markers = parseMarkers(content);
 
-    if (markers.length === 0) {
-      content = insertMissingMarkers(content, expectedMarkerCount);
-    } else if (markers.length > expectedMarkerCount) {
+    if (markers.length > expectedMarkerCount) {
       content = removeExcessMarkers(content, expectedMarkerCount);
     } else if (markers.length < expectedMarkerCount) {
-      content = insertMissingMarkers(content, expectedMarkerCount);
+      content = insertMissingMarkers(content, expectedMarkerCount, title, cleanSubheadings);
     }
 
     // 최종 검증
@@ -623,6 +785,8 @@ notice; the guide governs how the sentences sound.`
       imageGuides: [],
       wordCount: charCountValue,
       keywordCounts,
+      missingSubheadings,
+      usage: extractUsage(modelName, response.usage),
     };
   } catch (error) {
     console.error("전문가 콘텐츠 생성 오류:", error);
@@ -631,19 +795,51 @@ notice; the guide governs how the sentences sound.`
 }
 
 /**
- * 부족한 마커를 삽입합니다
+ * 빠진 마커만 골라 본문에 삽입합니다.
+ *
+ * ⚠️ 과거에는 이미 들어 있는 마커를 무시하고 1번부터 전부 다시 넣어, 3/5개만
+ * 들어온 경우 8개가 되어 최종 검증에서 예외가 났습니다. 지금은 없는 번호만 넣습니다.
+ *
+ * 제목·소제목 줄에는 넣지 않습니다. 소제목 바로 위/아래에 사진이 붙으면
+ * 섹션 구분이 깨져 보이기 때문입니다.
  */
-function insertMissingMarkers(content: string, imageCount: number): string {
+function insertMissingMarkers(
+  content: string,
+  imageCount: number,
+  title: string = "",
+  subheadings: string[] = []
+): string {
   const lines = content.split("\n");
-  const markerCount = imageCount;
-  const linesPerMarker = Math.floor(lines.length / (markerCount + 1));
 
-  let currentLine = linesPerMarker;
-  for (let i = 1; i <= markerCount; i++) {
-    if (currentLine < lines.length) {
-      lines.splice(currentLine, 0, `[IMAGE_${i}]`);
-      currentLine += linesPerMarker + 1;
-    }
+  const missing: number[] = [];
+  for (let i = 1; i <= imageCount; i++) {
+    if (!content.includes(`[IMAGE_${i}]`)) missing.push(i);
+  }
+  if (missing.length === 0) return content;
+
+  // 마커를 붙일 수 있는 줄: 빈 줄도 아니고 제목·소제목도 아닌 본문 줄
+  const bodyLineIndexes = lines
+    .map((line, idx) => ({ line, idx }))
+    .filter(({ line }) => line.trim() && !isHeadingLine(line, title, subheadings))
+    .map(({ idx }) => idx);
+
+  if (bodyLineIndexes.length === 0) {
+    // 넣을 곳이 없으면 맨 끝에 붙입니다 (개수는 맞춰야 하므로).
+    return [...lines, ...missing.map((i) => `[IMAGE_${i}]`)].join("\n");
+  }
+
+  // 본문 줄에 고르게 분배합니다. 뒤에서부터 넣어 인덱스가 밀리지 않게 합니다.
+  const step = bodyLineIndexes.length / (missing.length + 1);
+  const insertions = missing.map((markerIndex, order) => ({
+    markerIndex,
+    lineIndex: bodyLineIndexes[Math.min(
+      bodyLineIndexes.length - 1,
+      Math.floor(step * (order + 1))
+    )],
+  }));
+
+  for (const { markerIndex, lineIndex } of [...insertions].reverse()) {
+    lines.splice(lineIndex + 1, 0, `[IMAGE_${markerIndex}]`);
   }
 
   return lines.join("\n");

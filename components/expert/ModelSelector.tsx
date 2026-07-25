@@ -10,30 +10,25 @@ interface ModelSelectorProps {
 }
 
 // ⚠️ 실존하는 모델 ID만 사용합니다. lib/openai/client.ts 의 OPENAI_MODELS 와 일치해야 합니다.
+//
+// 2026-07-25 사용자 결정:
+//   - '최고 품질(sol)' 프리셋 제거. 비용이 커서 쓰지 않기로 했습니다.
+//   - 균형형의 이미지 분석을 terra → luna로 내려 글당 비용을 100원 수준으로 맞춥니다.
+//     글의 질을 좌우하는 본문 생성만 terra로 유지합니다.
 const PRESET_CONFIGS = {
   balanced: {
     label: '⚖️ 균형형 (추천)',
-    description: 'GPT-5.6 Terra - 성능과 비용의 균형 (기본값)',
+    description: '본문은 Terra, 이미지 분석·검색은 Luna - 글당 약 100원 (기본값)',
     config: {
-      imageAnalysisModel: 'gpt-5.6-terra',
+      imageAnalysisModel: 'gpt-5.6-luna',
       webSearchModel: 'gpt-5.6-luna',
       contentGenerationModel: 'gpt-5.6-terra',
       creativity: 7,
     },
   },
-  quality: {
-    label: '🏆 최고 품질',
-    description: 'GPT-5.6 Sol - 이미지 분석과 글쓰기 모두 최고 성능 (비용 높음)',
-    config: {
-      imageAnalysisModel: 'gpt-5.6-sol',
-      webSearchModel: 'gpt-5.6-terra',
-      contentGenerationModel: 'gpt-5.6-sol',
-      creativity: 7,
-    },
-  },
   economical: {
     label: '💰 절약형',
-    description: 'GPT-5.6 Luna - 비용 우선',
+    description: '전부 Luna - 가장 저렴하지만 글맛이 조금 떨어질 수 있어요',
     config: {
       imageAnalysisModel: 'gpt-5.6-luna',
       webSearchModel: 'gpt-5.6-luna',
@@ -59,24 +54,60 @@ export function ModelSelector({
     setCustomModel('');
   };
 
+  /**
+   * 현재 설정과 일치하는 프리셋 키. 없으면 null(직접 지정한 조합).
+   *
+   * 창의성은 슬라이더로 따로 조절하므로 비교에서 제외합니다. 그래야 창의성만
+   * 바꿨을 때 선택 표시가 사라지지 않습니다.
+   */
+  const activePreset =
+    Object.entries(PRESET_CONFIGS).find(
+      ([, preset]) =>
+        preset.config.imageAnalysisModel === modelConfig.imageAnalysisModel &&
+        preset.config.webSearchModel === modelConfig.webSearchModel &&
+        preset.config.contentGenerationModel === modelConfig.contentGenerationModel
+    )?.[0] ?? null;
+
   return (
     <div className="w-full space-y-4">
       <h3 className="text-lg font-semibold">🤖 AI 모델 설정</h3>
 
-      {/* 프리셋 선택 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {Object.entries(PRESET_CONFIGS).map(([key, preset]) => (
-          <button
-            key={key}
-            onClick={() => handlePresetClick(preset.config as ModelConfig)}
-            disabled={disabled}
-            className="p-3 rounded-lg border-2 text-left transition-all hover:bg-gray-50 border-gray-200 disabled:opacity-50"
-          >
-            <div className="font-semibold text-sm">{preset.label}</div>
-            <div className="text-xs text-gray-600 mt-1">{preset.description}</div>
-          </button>
-        ))}
+      {/* 프리셋 선택 — 현재 설정과 일치하는 프리셋을 눌린 상태로 보여줍니다 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {Object.entries(PRESET_CONFIGS).map(([key, preset]) => {
+          const isSelected = activePreset === key;
+
+          return (
+            <button
+              key={key}
+              onClick={() => handlePresetClick(preset.config as ModelConfig)}
+              disabled={disabled}
+              aria-pressed={isSelected}
+              className={`relative p-3 rounded-lg border-2 text-left transition-all disabled:opacity-50 ${
+                isSelected
+                  ? 'border-primary bg-primary/10 ring-2 ring-primary/30'
+                  : 'border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              {isSelected && (
+                <span className="absolute top-2 right-2 text-xs font-bold text-primary">
+                  ✓ 선택됨
+                </span>
+              )}
+              <div className={`font-semibold text-sm ${isSelected ? 'text-primary' : ''}`}>
+                {preset.label}
+              </div>
+              <div className="text-xs text-gray-600 mt-1">{preset.description}</div>
+            </button>
+          );
+        })}
       </div>
+
+      {!activePreset && (
+        <p className="text-xs text-gray-500">
+          프리셋과 다른 조합입니다 (고급 설정에서 직접 지정한 상태)
+        </p>
+      )}
 
       {/* 고급 설정 */}
       <button

@@ -1,6 +1,14 @@
 import { openai, IMAGE_ANALYSIS_MODEL, resolveModel, buildChatParams } from "./client";
 import { getExpertPrompt } from "@/lib/experts/prompts";
-import type { ImageAnalysisResult, CompressedImageAnalysis, ExpertType, ModelConfig } from "@/types/index";
+import { extractUsage, sumUsage } from "./pricing";
+import type {
+  ImageAnalysisResult,
+  CompressedImageAnalysis,
+  ExpertType,
+  ModelConfig,
+  OverallAnalysis,
+  TokenUsage,
+} from "@/types/index";
 
 export async function analyzeImagesExpert(
   images: string[],
@@ -12,43 +20,30 @@ export async function analyzeImagesExpert(
     const expertPrompt = getExpertPrompt(expertType);
     const model = modelConfig.imageAnalysisModel;
 
-    // 배치 분석 (전문가 프롬프트 사용)
-    const imageAnalyses = await analyzeImageBatchExpert(
+    // 배치 분석 (전문가 프롬프트 사용).
+    //
+    // 배치 응답에는 개별 이미지 분석과 함께 전체 테마(overall)가 들어 있습니다.
+    // 과거에는 이 overall을 버리고 이미지 3장을 다시 보내 별도로 한 번 더
+    // 분석했습니다(2026-07-25 제거). 같은 이미지를 두 번 업로드하는 셈이라
+    // 입력 토큰이 그만큼 더 들었고, 얻는 정보는 거의 같았습니다.
+    const { analyses, overall, usage } = await analyzeImageBatchExpert(
       images,
+      topic,
       expertPrompt.imageAnalysisSystemPrompt,
       model,
       1
     );
 
-    // 통합 컨텍스트 분석
-    const overall = await analyzeOverallContextExpert(
-      images,
-      topic,
-      expertPrompt.imageAnalysisSystemPrompt,
-      model
-    );
-
-    // 토큰 비용 추정 (모델별로 다름)
-    const tokensPerImage = modelConfig.imageAnalysisModel.includes('gpt-4') ? 170 : 150;
-    const baseTokens = images.length * tokensPerImage;
-    const promptTokens = 500;
-    const outputTokens = 800;
-    const totalTokens = baseTokens + promptTokens + outputTokens;
-
-    // 모델별 가격 추정 (대략값)
-    let cost = 0;
-    if (modelConfig.imageAnalysisModel.includes('gpt-4')) {
-      cost = (totalTokens / 1000000) * 2.5 + (outputTokens / 1000000) * 10;
-    } else if (modelConfig.imageAnalysisModel.includes('claude')) {
-      cost = (totalTokens / 1000000) * 15 + (outputTokens / 1000000) * 75; // Claude Opus 가격
-    } else if (modelConfig.imageAnalysisModel.includes('gemini')) {
-      cost = (totalTokens / 1000000) * 1.25 + (outputTokens / 1000000) * 5; // Gemini Pro 가격
-    }
-
     return {
-      images: imageAnalyses,
-      overall,
-      costEstimate: Math.round(cost * 10000), // 센트 단위로 반환
+      images: analyses,
+      overall: overall ?? {
+        theme: topic,
+        style: "visual",
+        suggestions: ["이미지를 자연스럽게 배치하세요"],
+      },
+      // 실제 사용량 기반 비용(USD). 추정치가 아닙니다.
+      costEstimate: usage.usd,
+      usage,
     };
   } catch (error) {
     console.error("전문가 이미지 분석 오류:", error);
@@ -56,26 +51,48 @@ export async function analyzeImagesExpert(
   }
 }
 
+interface BatchAnalysisResult {
+  analyses: CompressedImageAnalysis[];
+  /** 첫 배치가 판단한 전체 테마 (없으면 null) */
+  overall: OverallAnalysis | null;
+  usage: TokenUsage;
+}
+
 /**
  * 전문가 기반 배치 분석 (내부 함수)
  */
 async function analyzeImageBatchExpert(
   images: string[],
+  topic: string,
   systemPrompt: string,
   model: string,
   _startIndex: number = 1,
   batchSize: number = 5
-): Promise<CompressedImageAnalysis[]> {
+): Promise<BatchAnalysisResult> {
   const allAnalyses: CompressedImageAnalysis[] = [];
+  const usageParts: TokenUsage[] = [];
+  let overall: OverallAnalysis | null = null;
 
   // 배치로 나누기
   for (let i = 0; i < images.length; i += batchSize) {
     const batch = images.slice(i, Math.min(i + batchSize, images.length));
-    const batchAnalyses = await analyzeImageBatchInternalExpert(batch, systemPrompt, model, i + 1);
-    allAnalyses.push(...batchAnalyses);
+    const result = await analyzeImageBatchInternalExpert(batch, topic, systemPrompt, model, i + 1);
+    allAnalyses.push(...result.analyses);
+    usageParts.push(result.usage);
+
+    // 전체 테마는 첫 배치의 판단을 씁니다 (사진 순서상 앞쪽이 글의 주제에 가깝습니다).
+    if (!overall && result.overall) {
+      overall = result.overall;
+    }
   }
 
-  return allAnalyses;
+  const modelName = resolveModel(model, IMAGE_ANALYSIS_MODEL);
+
+  return {
+    analyses: allAnalyses,
+    overall,
+    usage: sumUsage(modelName, usageParts),
+  };
 }
 
 /**
@@ -83,17 +100,22 @@ async function analyzeImageBatchExpert(
  */
 async function analyzeImageBatchInternalExpert(
   images: string[],
+  topic: string,
   systemPrompt: string,
   model: string,
   startIndex: number = 1
-): Promise<CompressedImageAnalysis[]> {
+): Promise<BatchAnalysisResult> {
   try {
     const messageContent = [
       {
         type: "text" as const,
         text: `You MUST respond with ONLY valid JSON. No markdown, no code blocks, no extra text.
 
+These images will be used for a blog post titled: "${topic}"
+
 Analyze each image and provide analysis starting from image index ${startIndex}.
+Also fill in "overall" with the shared theme, visual style, and how to use these
+images in that blog post.
 
 Return ONLY this JSON structure:
 {
@@ -175,88 +197,28 @@ Return ONLY this JSON structure:
     }
 
     const imageAnalyses: CompressedImageAnalysis[] = analysis.images || [];
+    const overall: OverallAnalysis | null =
+      analysis.overall && typeof analysis.overall.theme === "string"
+        ? {
+            theme: analysis.overall.theme,
+            style: analysis.overall.style ?? "visual",
+            suggestions: Array.isArray(analysis.overall.suggestions)
+              ? analysis.overall.suggestions
+              : [],
+          }
+        : null;
 
-    // 인덱스 조정
-    return imageAnalyses.map((img, idx) => ({
-      ...img,
-      idx: startIndex + idx,
-    }));
+    return {
+      // 인덱스 조정
+      analyses: imageAnalyses.map((img, idx) => ({
+        ...img,
+        idx: startIndex + idx,
+      })),
+      overall,
+      usage: extractUsage(modelName, response.usage),
+    };
   } catch (error) {
     console.error("전문가 이미지 배치 분석 오류:", error);
     throw error;
-  }
-}
-
-/**
- * 전문가 기반 통합 컨텍스트 분석
- */
-async function analyzeOverallContextExpert(
-  images: string[],
-  topic: string,
-  systemPrompt: string,
-  model: string
-): Promise<{ theme: string; style: string; suggestions: string[] }> {
-  try {
-    const messageContent = [
-      {
-        type: "text" as const,
-        text: `These images will be used for a blog post about: "${topic}"\n\nProvide overall analysis in JSON format:\n{\n  "theme": "overall visual theme",\n  "style": "visual style",\n  "suggestions": ["how to use in blog"]\n}`,
-      },
-      ...images.slice(0, 3).map((image) => ({
-        type: "image_url" as const,
-        image_url: {
-          url: image,
-          detail: "high" as const,
-        },
-      })),
-    ];
-
-    const modelName = resolveModel(model, IMAGE_ANALYSIS_MODEL);
-
-    const response = await openai.chat.completions.create(
-      buildChatParams({
-        model: modelName,
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt,
-          },
-          {
-            role: "user",
-            content: messageContent as any,
-          },
-        ],
-        temperature: 0.3,
-        maxTokens: 4000,
-      })
-    );
-
-    const content = response.choices[0]?.message?.content;
-
-    if (!content) {
-      return {
-        theme: topic,
-        style: "visual",
-        suggestions: ["이미지를 자연스럽게 배치하세요"],
-      };
-    }
-
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return {
-        theme: topic,
-        style: "visual",
-        suggestions: ["이미지를 자연스럽게 배치하세요"],
-      };
-    }
-
-    return JSON.parse(jsonMatch[0]);
-  } catch (error) {
-    console.error("전문가 종합 컨텍스트 분석 오류:", error);
-    return {
-      theme: topic,
-      style: "visual",
-      suggestions: ["이미지를 자연스럽게 배치하세요"],
-    };
   }
 }
