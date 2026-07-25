@@ -41,6 +41,8 @@ interface GenerationResult {
   };
   /** 그대로 들어가야 했는데 글에서 찾지 못한 소제목 */
   missingSubheadings?: string[];
+  /** 자동 교정 후에도 남은 시적 표현·AI 말투 */
+  toneViolations?: string[];
 }
 
 export default function GeneratePage() {
@@ -387,6 +389,7 @@ export default function GeneratePage() {
         keywordCounts: contentData.content.keywordCounts,
         cost: contentData.cost,
         missingSubheadings: contentData.content.missingSubheadings,
+        toneViolations: contentData.content.toneViolations,
       };
 
       setResult(generated);
@@ -707,6 +710,25 @@ export default function GeneratePage() {
                 </div>
               );
             })()}
+
+            {/* 시적 표현·AI 말투는 절대 들어가면 안 되므로, 자동 교정 후에도 남으면 알려줍니다 */}
+            {result.toneViolations && result.toneViolations.length > 0 && (
+              <div className="p-4 rounded-lg border-2 border-red-300 bg-red-50">
+                <p className="font-semibold text-red-900">
+                  🚫 시적 표현·AI 말투 {result.toneViolations.length}건이 남아 있습니다
+                </p>
+                <ul className="mt-2 space-y-1 text-sm text-red-800">
+                  {result.toneViolations.map((sentence, idx) => (
+                    <li key={idx}>· {sentence}</li>
+                  ))}
+                </ul>
+                <p className="text-xs text-red-700 mt-2">
+                  자동 교정을 시도했지만 이 문장들은 고치지 못했습니다. 아래 &ldquo;부분 수정
+                  요청&rdquo;에 <strong>&ldquo;이 문장 담백하게 다시 써줘&rdquo;</strong>라고
+                  넣거나 다시 생성해 보세요.
+                </p>
+              </div>
+            )}
 
             {/* 제목·소제목은 그대로 들어가야 하므로, 못 들어간 것이 있으면 알려줍니다 */}
             {result.missingSubheadings && result.missingSubheadings.length > 0 && (

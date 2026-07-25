@@ -109,6 +109,13 @@ export interface GeneratedContentWithImages {
    * 값이 있으면 화면에 경고로 띄워 사용자가 재생성을 판단할 수 있게 합니다.
    */
   missingSubheadings?: string[];
+  /**
+   * 코드 검사(tone-guard)에서 걸렸고 자동 교정 후에도 남은 시적 표현·AI 말투.
+   *
+   * 사용자 지시로 이런 표현은 절대 들어가면 안 되므로, 남으면 화면에 경고를 띄워
+   * 부분 수정이나 재생성을 판단하게 합니다.
+   */
+  toneViolations?: string[];
   /** 이 글을 만드는 데 실제로 쓴 토큰 사용량 */
   usage?: TokenUsage;
 }

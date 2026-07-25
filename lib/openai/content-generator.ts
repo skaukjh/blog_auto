@@ -11,6 +11,7 @@ import { getExpertPrompt } from "@/lib/experts/prompts";
 import { parseMarkers } from "@/lib/utils/marker-parser";
 import { enforceOutline, isHeadingLine, SECTION_CHAR_RANGE } from "@/lib/utils/outline";
 import { extractUsage } from "./pricing";
+import { detectToneViolations, fixToneViolations, type ToneViolation } from "./tone-guard";
 import type {
   GeneratedContentWithImages,
   ImageAnalysisResult,
@@ -164,6 +165,16 @@ CRITICAL RULES:
 - Improve readability and flow based on the user's request
 - Maintain the overall structure and length
 - Use only ~~요 sentence endings (맛있어요, 좋았어요, 추천해요, etc.)
+- PRESERVE the title and any subheading lines EXACTLY as they are — the author fixed those
+  and not one character may change
+
+🚫 NEVER introduce poetic, literary, or AI-sounding phrasing while editing. No mood-setting
+   (골목을 걷다가, 따뜻한 불빛, 발걸음이 느려져요), no 괜히/왠지 mood filler, no abstract
+   nouns as subjects (정취/무드/온기/여백/현장감/질감), no ~함이 느껴졌어요 / 어우러져요 /
+   스며들어요, no ad copy (존재감/돋보여요/자랑해요/인상을 줘요/충분했어요), no AI hedging
+   (사진만으로는/확인되지 않아요/~인 만큼/~하는 편이 좋아요), no mention of taking or
+   editing photos. Keep every sentence plain, concrete, and friendly — like talking to a
+   friend. If the current text already contains such phrasing, fix it while you are here.
 
 Output ONLY the modified blog post content. No explanations.`;
 
@@ -463,8 +474,34 @@ ABSOLUTE RULES FOR THE SKELETON:
   forward, not ${cleanSubheadings.length} disconnected mini-posts.`;
     }
 
+    // 프롬프트 맨 앞에 두는 최상위 금지 규칙.
+    //
+    // 사용자가 "절대 시적 표현이나 AI 말투가 들어가면 안 된다"고 재차 강조했습니다
+    // (2026-07-25). 같은 내용을 ① 여기(맨 앞) ② PRIORITY 3 ③ 프롬프트 맨 끝
+    // ④ system 메시지에 넣고, 생성 후 tone-guard가 코드로 다시 검사합니다.
+    const toneBan = `🚫🚫 RULE ZERO — READ THIS BEFORE ANYTHING ELSE 🚫🚫
+This post must sound like a real person chatting with a friend. NOT a poem, NOT an essay,
+NOT ad copy, NOT AI. If a sentence sounds "written", delete it and say the plain fact instead.
+
+NEVER produce sentences like these (these are real rejected examples):
+  ✗ 성수역 근처 골목을 걷다가 회색빛 벽돌 건물 사이로 따뜻한 불빛이 보이면 괜히 발걸음이 느려져요.
+  ✗ 화려하게 꾸민 곳보다 편하게 앉아 구이의 흐름을 지켜보고 싶은 날 있잖아요.
+  ✗ 짙은 벽돌과 콘크리트 질감의 외벽 위로 유리창 안쪽으로는 노란 조명이 포근하게 비쳐요.
+  ✗ 오랜 시간 이 골목을 지켜온 동네 식당 같은 친근함이 느껴졌어요.
+
+Write like this instead:
+  ✓ 성수역에서 5분쯤 걸어가니까 가게 앞에 숯불 연기가 올라오고 있었어요.
+  ✓ 벽돌 건물이 이어지는 골목이고, 가게 창으로 안이 환하게 보였어요.
+  ✓ 오래된 동네 식당 같은 분위기라 들어가기 편했어요.
+  ✓ 안에 들어가니까 4인 테이블이 여덟 개쯤 있고 자리마다 화로가 놓여 있었어요.
+
+Every single sentence must pass this test: "would I actually say this out loud to a friend?"
+If not, rewrite it plainer.
+
+`;
+
     // User Prompt 생성
-    let userPrompt = `Generate a Korean blog post by an expert ${expertType} blogger with the following specifications:
+    let userPrompt = `${toneBan}Generate a Korean blog post by an expert ${expertType} blogger with the following specifications:
 
 Title (also the subject of this post): ${topic}
 Character count: ${
@@ -702,20 +739,50 @@ ${
 
     userPrompt += creativityDirective;
 
+    // 맨 끝에 한 번 더. 모델은 마지막 지시를 가장 강하게 따릅니다.
+    userPrompt += `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚫 FINAL CHECK BEFORE YOU OUTPUT — go through your draft sentence by sentence and
+   DELETE OR REWRITE any sentence that contains:
+   1. scene-setting or mood-building (걷다가, 발걸음, 불빛/조명 감성 묘사, 사이로 ~이 보이면)
+   2. 괜히 / 왠지 / ~하는 날 있잖아요  → mood filler, cut it
+   3. abstract nouns doing the work (정취, 무드, 온기, 여백, 현장감, 질감, 실루엣)
+   4. ~함이 느껴졌어요 / 어우러져요 / 스며들어요 / 지켜온  → literary, cut it
+   5. ad copy (존재감, 돋보여요, 자랑해요, 인상을 줘요, ~을 예고, ~가 살아 있어요, 충분했어요)
+   6. AI hedging (사진만으로는, 확인되지 않아요, ~인 만큼, ~하는 편이 좋아요, ~라 할 수 있어요)
+   7. any mention of taking or editing photos
+
+   Replace each one with a plain, concrete sentence about what you did, saw, ate, paid,
+   or thought. Concrete and slightly blunt is ALWAYS better than pretty.
+
+   Output only the finished post. No preamble, no explanation.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
     const response = await openai.chat.completions.create(
       buildChatParams({
         model: modelName,
         messages: [
           {
             role: "system",
-            content: trimmedGuide
-              ? `${expertPrompt.contentGenerationSystemPrompt}
+            content:
+              (trimmedGuide
+                ? `${expertPrompt.contentGenerationSystemPrompt}
 
 ⚠️ STYLE OVERRIDE: The user supplied a learned style guide in the user message.
 Where this persona's default tone conflicts with that guide, THE GUIDE WINS -
 especially for sentence endings. The persona governs domain expertise and what to
 notice; the guide governs how the sentences sound.`
-              : expertPrompt.contentGenerationSystemPrompt,
+                : expertPrompt.contentGenerationSystemPrompt) +
+              // 페르소나가 "감성적으로 써라"로 읽히지 않도록 system 단계에서 못을 박습니다.
+              `
+
+🚫 ABSOLUTE, NON-NEGOTIABLE: never write poetically or literarily, and never sound like AI.
+No mood-setting, no scene painting, no metaphors, no personification, no abstract nouns as
+subjects (정취/무드/온기/여백/현장감/질감), no ad copy (존재감/돋보여요/자랑해요), no AI
+hedging (사진만으로는/확인되지 않아요). Plain, concrete, friendly spoken Korean only — the
+voice of someone telling a friend what they actually did. This outranks every stylistic
+instinct the persona above may have.`,
           },
           {
             role: "user",
@@ -754,6 +821,36 @@ notice; the guide governs how the sentences sound.`
       }
     }
 
+    // 시적 표현·AI 말투 검사 (프롬프트로 금지한 것을 코드로 한 번 더 확인)
+    //
+    // 사용자 지시: "절대 시적 표현이나 AI 말투가 들어가면 안 돼."
+    // 걸린 문장만 골라 고치므로 글 전체를 다시 생성하지 않고, 추가 비용도 작습니다.
+    let toneViolations: ToneViolation[] = detectToneViolations(content, title, cleanSubheadings);
+    let toneFixUsd = 0;
+
+    if (toneViolations.length > 0) {
+      console.warn(
+        `⚠️ 시적 표현·AI 말투 ${toneViolations.length}건 발견 → 해당 문장만 교정합니다:\n` +
+          toneViolations.map((v) => `   · [${v.reason}] ${v.sentence}`).join("\n")
+      );
+
+      const fixed = await fixToneViolations(
+        content,
+        toneViolations,
+        modelConfig.contentGenerationModel,
+        /~~다/.test(endingRule) ? "다" : "요"
+      );
+
+      content = fixed.content;
+      toneViolations = fixed.remaining;
+      toneFixUsd = fixed.usage?.usd ?? 0;
+
+      console.log(
+        `✏️ 톤 교정 ${fixed.fixedCount}건 완료` +
+          (toneViolations.length > 0 ? `, ${toneViolations.length}건은 남았습니다` : "")
+      );
+    }
+
     // 마커 검증
     const expectedMarkerCount = imageAnalysis.images.length;
     const markers = parseMarkers(content);
@@ -780,13 +877,18 @@ notice; the guide governs how the sentences sound.`
     // 글자 수 계산
     const charCountValue = content.replace(/\[IMAGE_\d+\]/g, "").length;
 
+    const usage = extractUsage(modelName, response.usage);
+
     return {
       content,
       imageGuides: [],
       wordCount: charCountValue,
       keywordCounts,
       missingSubheadings,
-      usage: extractUsage(modelName, response.usage),
+      // 교정하고도 남은 시적 표현·AI 말투 (있으면 화면에 경고로 띄웁니다)
+      toneViolations: toneViolations.map((v) => `${v.sentence} (${v.reason})`),
+      // 톤 교정 호출 비용까지 합산해 실제 지출과 맞춥니다.
+      usage: { ...usage, usd: usage.usd + toneFixUsd },
     };
   } catch (error) {
     console.error("전문가 콘텐츠 생성 오류:", error);

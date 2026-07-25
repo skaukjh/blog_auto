@@ -201,8 +201,32 @@ npm run build       # 프로덕션 빌드
 `노란 조명이 포근하게 비쳐요`, `오랜 시간 이 골목을 지켜온 동네 식당 같은 친근함`).
 **친근한 구어체가 기본이고, 분위기를 묘사하는 문학적 문장은 금지입니다.**
 
-- PRIORITY 3에 금지 패턴을 예시째로 박아 두었습니다(장면 묘사·분위기 형용·질감 묘사,
-  추상명사를 주어로 쓰기, `괜히`/`왠지` 같은 무드용 부사). Bad/Good 대조 예시도 함께 있습니다
+**같은 금지를 5중으로 걸어 두었습니다.** 사용자가 "절대 들어가면 안 된다"고 재차 강조해서
+(2026-07-25) 프롬프트 지시 하나에 의존하지 않습니다.
+
+1. `userPrompt` **맨 앞** `RULE ZERO` — 실제 반려된 문장을 ✗/✓ 대조로 박아 둠
+2. `PRIORITY 3` — 금지 패턴 상세 + Bad/Good 예시
+3. `userPrompt` **맨 끝** `FINAL CHECK` — 출력 전 문장별 자기 점검 7개 항목
+   (모델은 마지막 지시를 가장 강하게 따릅니다)
+4. **system 메시지** — 페르소나가 "감성적으로 써라"로 읽히지 않게 못을 박음
+5. ⭐ **코드 검사 `lib/openai/tone-guard.ts`** — 아래 참고
+
+`refineBlogContent`(부분 수정)에도 같은 금지 규칙이 있습니다. 부분 수정에서 시적 표현이
+다시 들어오던 경로였습니다.
+
+#### 코드 검사 (tone-guard)
+
+종결어미·소제목과 같은 원칙입니다. **반드시 지켜야 하는 규칙은 LLM에 맡기지 않고 코드가 확인합니다.**
+
+- `BANNED_PATTERNS`(약 30개 정규식)로 생성된 글을 문장 단위로 검사합니다
+- 걸린 문장이 있으면 **그 문장만 모아 한 번의 호출로 고쳐 받아 치환**합니다.
+  글 전체를 재생성하지 않으므로 추가 비용이 작고, 걸리지 않으면 호출 자체가 없습니다
+- 교정문이 또 금지 패턴에 걸리면 적용하지 않고, 남은 것은 `toneViolations`로 반환해
+  화면에 빨간 경고로 띄웁니다
+- 제목·소제목 줄과 `[IMAGE_N]` 마커는 검사하지 않습니다(사용자가 정한 문구는 건드리면 안 됨)
+- ⚠️ **패턴을 추가할 때는 반드시 구체적인 조합으로 좁히세요.** `따뜻한` 하나만 막으면
+  "국물이 따뜻해서 좋았어요" 같은 정상 문장까지 걸립니다. 지금은 `따뜻한 불빛`처럼
+  조합으로 잡습니다. 사용자 지적 문장 14개 검출 / 평범한 구어체 10개 오검출 0으로 검증했습니다
 - ⚠️ 창의성 슬라이더 높은 값의 지시문에서 **"bold imagery"를 되살리지 마세요.** 그 문구가
   시적 표현의 원인이었습니다. 지금은 "창의성이 높다 = 개성과 구체성이 더 많다, 비유가
   많아지는 게 아니다"로 바꿔 두었습니다
@@ -342,6 +366,7 @@ node automation/scripts/verify-supabase.mjs
 | 소제목 개수/분량 조정 | `lib/utils/outline.ts` (`MIN_SUBHEADINGS`·`MAX_SUBHEADINGS`·`SECTION_CHAR_RANGE`) — 프롬프트·UI 공용 |
 | 제목·소제목 강제 로직 | `lib/utils/outline.ts` `enforceOutline()` |
 | 자동 저장/복구 | `lib/utils/draft-storage.ts` + `generate/page.tsx` 복구 배너 |
+| 시적 표현·AI 말투 금지어 추가 | `lib/openai/tone-guard.ts` `BANNED_PATTERNS` (구체적 조합으로 좁힐 것) |
 | 모델 단가 추가·수정 | `lib/openai/pricing.ts` `MODEL_PRICING` |
 | 모델 프리셋 | `components/expert/ModelSelector.tsx` `PRESET_CONFIGS` (기본값은 `ExpertModeTab`의 `modelConfig` 초기값과 일치시켜야 함) |
 | 보호 경로 추가 | `middleware.ts` `protectedPaths` |
