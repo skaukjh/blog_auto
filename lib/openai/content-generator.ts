@@ -286,7 +286,15 @@ export async function generateBlogContentExpert(
    * 사용자 결정(2026-07-24): 이 값이 있으면 **학습된 전문가 문체의 어미를 무시하고**
    * 모든 글을 이 어미로 씁니다. null이면 학습 문체를 따릅니다.
    */
-  forcedEnding?: "요" | "다" | null
+  forcedEnding?: "요" | "다" | null,
+  /**
+   * 사용자가 직접 입력한 "내가 실제로 경험한 내용".
+   *
+   * 이미지나 검색 결과와 달리, 사용자가 1인칭으로 겪은 사실이므로 진실로 취급합니다.
+   * 요약·재구성은 허용하되 **여기 담긴 정보는 하나도 빠짐없이** 최종 글에 반영해야 합니다.
+   * 글자 수 제한은 없습니다.
+   */
+  personalExperience?: string | null
 ): Promise<GeneratedContentWithImages> {
   try {
     const expertPrompt = getExpertPrompt(expertType);
@@ -408,6 +416,29 @@ ${recommendationsSection}`;
       const placeInfoText = formatPlaceInfo(placeInfo);
       userPrompt += `\n\n⚠️ PLACE INFORMATION:
 ${placeInfoText}`;
+    }
+
+    // 사용자가 직접 입력한 실제 경험 — 요약·재구성은 허용하되 하나도 빠뜨리면 안 됩니다.
+    const trimmedExperience = personalExperience?.trim();
+    if (trimmedExperience) {
+      userPrompt += `\n\n⚠️⚠️ AUTHOR'S REAL, FIRST-HAND EXPERIENCE (HIGHEST-PRIORITY CONTENT — MUST BE FULLY REFLECTED):
+The author personally experienced the following and wrote it down themselves.
+Treat EVERY detail here as TRUE, first-hand fact. This overrides the "do not invent
+facts" caution below — these are NOT inventions, they are the author's real experience,
+so you MUST include them even if they are not visible in the images.
+
+"""
+${trimmedExperience}
+"""
+
+ABSOLUTE RULES FOR THIS EXPERIENCE:
+- Include EVERY fact, detail, number, name, feeling, and episode above. Omit NOTHING.
+- You SHOULD summarize / rephrase / reorder it so it flows naturally in the author's
+  voice and style — do NOT paste it as a verbatim block or a separate quoted section —
+  but no piece of information may be dropped or contradicted.
+- Weave it seamlessly into the narrative as lived experience, spread across the post.
+- If any of this conflicts with a generic guideline, THIS SECTION WINS.
+- There is no length limit on this input; cover all of it no matter how long it is.`;
     }
 
     // 학습된 문체가 있으면 프롬프트에 싣고, 종결어미도 거기서 끌어옵니다.

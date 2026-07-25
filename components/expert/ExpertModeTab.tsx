@@ -47,6 +47,9 @@ interface ExpertModeTabProps {
   onKeywordsChange: (keywords: KeywordItem[]) => void;
   length: 'short' | 'medium' | 'long';
   onLengthChange: (length: 'short' | 'medium' | 'long') => void;
+  /** 사용자가 직접 경험한 내용 (글자 수 제한 없음, AI가 빠짐없이 반영) */
+  personalExperience: string;
+  onPersonalExperienceChange: (value: string) => void;
   error?: string;
 }
 
@@ -63,6 +66,8 @@ export function ExpertModeTab({
   onKeywordsChange,
   length,
   onLengthChange,
+  personalExperience,
+  onPersonalExperienceChange,
   error,
 }: ExpertModeTabProps) {
   const [selectedExpert, setSelectedExpert] = useState<ExpertType | null>(null);
@@ -294,6 +299,28 @@ export function ExpertModeTab({
               />
               {keywords.length > 0 && (
                 <p className="text-sm text-green-600 mt-2">✓ {keywords.length}개의 키워드가 입력되었습니다</p>
+              )}
+            </div>
+
+            {/* 직접 경험한 내용 입력 (글자 수 제한 없음, AI가 빠짐없이 반영) */}
+            <div>
+              <h3 className="text-lg font-semibold mb-3">
+                ✍️ 내가 직접 경험한 내용 <span className="text-gray-400 text-sm font-normal">(선택)</span>
+              </h3>
+              <p className="text-sm text-gray-600 mb-2">
+                실제로 겪은 일을 자유롭게 적어주세요. AI가 이 내용을 <strong>빠짐없이</strong> 요약·참고해서 글에 반드시 반영합니다. 글자 수 제한은 없습니다.
+              </p>
+              <textarea
+                value={personalExperience}
+                onChange={(e) => onPersonalExperienceChange(e.target.value)}
+                placeholder="예: 오픈 시간에 맞춰 갔는데 이미 웨이팅이 5팀이나 있었어요. 시그니처 메뉴인 들기름 막국수를 시켰고, 면이 쫄깃해서 놀랐어요. 사장님이 직접 육수를 설명해주셨고..."
+                disabled={disabled || isLoading}
+                rows={6}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:bg-gray-100 resize-y leading-relaxed"
+              />
+              <p className="text-xs text-gray-500 mt-1">입력한 글자 수: {personalExperience.length.toLocaleString()}자 (제한 없음)</p>
+              {personalExperience.trim().length > 0 && (
+                <p className="text-sm text-green-600 mt-1">✓ 이 경험이 글에 빠짐없이 반영됩니다</p>
               )}
             </div>
 

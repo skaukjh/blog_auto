@@ -39,7 +39,8 @@ async function loadStyleGuide(scope: StyleScope): Promise<string | null> {
  *   recommendations?: RecommendationItem[],
  *   startSentence?: string,
  *   endSentence?: string,
- *   placeInfo?: PlaceInfo
+ *   placeInfo?: PlaceInfo,
+ *   personalExperience?: string   // 사용자가 직접 입력한 실제 경험 (빠짐없이 반영)
  * }
  */
 export async function POST(request: NextRequest): Promise<NextResponse<ExpertCreateContentResponse>> {
@@ -57,6 +58,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExpertCre
       startSentence,
       endSentence,
       placeInfo,
+      personalExperience,
     } = body;
 
     if (!topic || !length || !keywords || !imageAnalysis || !expertType || !modelConfig) {
@@ -109,7 +111,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExpertCre
       styleGuide,
       writingGuide?.guide ?? null,
       // 가이드가 종결어미를 지배하도록 설정된 경우, 학습 문체보다 우선합니다.
-      writingGuide?.endingPattern ?? null
+      writingGuide?.endingPattern ?? null,
+      // 사용자가 직접 입력한 실제 경험 — 빠짐없이 글에 반영됩니다.
+      personalExperience ?? null
     );
 
     // 비용 추정 (대략값)

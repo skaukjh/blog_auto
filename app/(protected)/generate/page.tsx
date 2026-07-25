@@ -22,6 +22,8 @@ export default function GeneratePage() {
   const [keywords, setKeywords] = useState<KeywordItem[]>([]);
   const [startSentence, setStartSentence] = useState('');
   const [endSentence, setEndSentence] = useState('');
+  // 사용자가 직접 경험한 내용 (글자 수 제한 없음, AI가 빠짐없이 반영)
+  const [personalExperience, setPersonalExperience] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<{ content: string; imageAnalysis: ImageAnalysisResult; wordCount: number; keywordCounts: Record<string, number>; cost?: { usd: number; krw: number; breakdown?: { imageAnalysis: { usd: number; krw: number }; contentGeneration: { usd: number; krw: number } } } } | null>(null);
@@ -202,6 +204,7 @@ export default function GeneratePage() {
           startSentence,
           endSentence,
           placeInfo: params.placeInfo,
+          personalExperience,
         }),
       });
 
@@ -228,7 +231,7 @@ export default function GeneratePage() {
     } finally {
       setLoading(false);
     }
-  }, [images, topic, keywords, length, startSentence, endSentence, compressImage]);
+  }, [images, topic, keywords, length, startSentence, endSentence, personalExperience, compressImage]);
 
   const handleCopyToClipboard = useCallback(async () => {
     if (!result) return;
@@ -661,6 +664,8 @@ export default function GeneratePage() {
             onKeywordsChange={setKeywords}
             length={length}
             onLengthChange={setLength}
+            personalExperience={personalExperience}
+            onPersonalExperienceChange={setPersonalExperience}
             error={error}
           />
         )}
